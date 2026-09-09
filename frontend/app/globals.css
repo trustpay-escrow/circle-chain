@@ -2,7 +2,23 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --bg-obsidian: #080e18;
+  --surface-steel: #101926;
+  --border-slate: #1e2d42;
+  --accent-emerald: #10b981;
+  --accent-amber: #f59e0b;
+}
+
 body {
-  background-color: #020617;
+  background-color: var(--bg-obsidian);
   color: #f8fafc;
+  font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
+  overflow-x: hidden;
+}
+
+/* Accessible focus ring */
+:focus-visible {
+  outline: 2px solid #10b981;
+  outline-offset: 2px;
 }
