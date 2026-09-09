@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@stellar/stellar-sdk": "^11.2.0",
-    "@stellar/wallet-kit": "^1.0.0",
+    "@stellar/freighter-api": "^2.0.0",
     "@supabase/supabase-js": "^2.39.0",
     "clsx": "^2.1.0",
     "lucide-react": "^0.330.0",

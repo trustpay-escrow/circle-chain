@@ -1,17 +1,16 @@
-import { StellarWalletsKit, WalletNetwork, allowAllModules, FREIGHTER_ID } from '@stellar/wallet-kit';
+import { isConnected, getPublicKey } from '@stellar/freighter-api';
 
-export const walletKit = new StellarWalletsKit({
-  network: WalletNetwork.TESTNET,
-  selectedWalletId: FREIGHTER_ID,
-  modules: allowAllModules(),
-});
-
-export const getConnectedPublicKey = async (): Promise<string | null> => {
+export const connectFreighterWallet = async (): Promise<string | null> => {
   try {
-    const { address } = await walletKit.getAddress();
-    return address || null;
+    const connected = await isConnected();
+    if (!connected) {
+      alert('Freighter wallet extension is not installed.');
+      return null;
+    }
+    const publicKey = await getPublicKey();
+    return publicKey || null;
   } catch (error) {
-    console.error('Failed to fetch wallet address:', error);
+    console.error('Failed to connect Freighter wallet:', error);
     return null;
   }
 };
