@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { connectFreighterWallet } from '../lib/stellar';
+import { WalletModal } from '../components/wallet-modal';
 import { Button } from '../components/ui/button';
 import { 
   ShieldCheck, 
@@ -25,15 +25,9 @@ export default function LandingPage() {
   const [activeTab, setActiveTab] = useState<'matrix' | 'slashing' | 'yield'>('matrix');
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
+  const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
   const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
   const [activeVideoStep, setActiveVideoStep] = useState(0);
-
-  const handleConnectWallet = async () => {
-    const pubKey = await connectFreighterWallet();
-    if (pubKey) {
-      setWalletAddress(pubKey);
-    }
-  };
 
   const heroMembers = [
     { name: 'Amina Bello', status: 'paid', slot: 'Cycle 1 (Received)', amount: '₦500,000' },
@@ -53,7 +47,7 @@ export default function LandingPage() {
     {
       title: '2. Stake Collateral in Vault',
       desc: 'Members deposit required collateral upon joining. Vault holds funds securely.',
-      visual: 'Freighter Wallet Sign Prompt • Staked ₦250,000 ($165 USDC)',
+      visual: 'Wallet Approval Prompt • Staked ₦250,000 ($165 USDC)',
       caption: 'Protects the group against future defaults.',
     },
     {
@@ -110,7 +104,7 @@ export default function LandingPage() {
       location: 'Port Harcourt, Nigeria',
       avatar: 'EN',
       badge: 'PH Investment Syndicate (₦10M Saved)',
-      quote: 'Super clean, simple interface. Connecting Freighter wallet takes 5 seconds, and tracking cycle contributions live on the grid makes group management effortless.',
+      quote: 'Super clean, simple interface. Connecting my wallet takes 5 seconds, and tracking cycle contributions live on the grid makes group management effortless.',
       stars: 5,
     },
   ];
@@ -170,7 +164,7 @@ export default function LandingPage() {
             <Button
               variant="gradient"
               size="lg"
-              onClick={handleConnectWallet}
+              onClick={() => setIsWalletModalOpen(true)}
               className="w-full sm:w-auto space-x-2 group"
             >
               <span>Connect Wallet to Get Started</span>
@@ -394,7 +388,6 @@ export default function LandingPage() {
               className="glass-card glass-card-hover rounded-2xl p-6 sm:p-7 space-y-4 border border-slate-800/90 relative flex flex-col justify-between"
             >
               <div className="space-y-4">
-                {/* Rating & Badge Header */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-1 text-amber-400">
                     {[...Array(t.stars)].map((_, i) => (
@@ -406,7 +399,6 @@ export default function LandingPage() {
                   </span>
                 </div>
 
-                {/* Quote Text */}
                 <div className="relative">
                   <Quote className="w-8 h-8 text-emerald-500/10 absolute -top-2 -left-2 -z-10 rotate-180" />
                   <p className="text-slate-300 text-sm leading-relaxed italic">
@@ -415,7 +407,6 @@ export default function LandingPage() {
                 </div>
               </div>
 
-              {/* User Bio Footer */}
               <div className="flex items-center space-x-3.5 pt-3 border-t border-slate-800/70">
                 <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white font-bold text-sm shadow-md">
                   {t.avatar}
@@ -488,7 +479,6 @@ export default function LandingPage() {
           </p>
         </div>
 
-        {/* Video Thumbnail Player Trigger Container */}
         <div
           className="relative glass-card border border-emerald-500/30 rounded-3xl overflow-hidden p-8 sm:p-12 text-center shadow-2xl group cursor-pointer"
           onClick={() => setIsVideoModalOpen(true)}
@@ -548,7 +538,7 @@ export default function LandingPage() {
         <div className="ambient-glow bg-emerald-500/20 w-72 h-72 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 -z-10" />
         <h2 className="text-2xl sm:text-4xl font-extrabold text-white">Ready to save with complete trust?</h2>
         <p className="text-slate-300 text-sm max-w-lg mx-auto">
-          Connect your Freighter wallet to start or join a circle on Stellar. Experience automated payouts today.
+          Connect your Stellar wallet to start or join a circle. Experience automated payouts today.
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-2">
           {walletAddress ? (
@@ -558,7 +548,7 @@ export default function LandingPage() {
               </Button>
             </Link>
           ) : (
-            <Button variant="gradient" size="lg" onClick={handleConnectWallet} className="w-full sm:w-auto">
+            <Button variant="gradient" size="lg" onClick={() => setIsWalletModalOpen(true)} className="w-full sm:w-auto">
               Connect Wallet
             </Button>
           )}
@@ -570,6 +560,13 @@ export default function LandingPage() {
         <p>© 2026 CircleChain Protocol. Built on Stellar Soroban.</p>
         <p>CircleChain is operating on Stellar Testnet for testing and verification.</p>
       </footer>
+
+      {/* MULTI-WALLET MODAL */}
+      <WalletModal
+        isOpen={isWalletModalOpen}
+        onClose={() => setIsWalletModalOpen(false)}
+        onSelectAddress={(pubKey) => setWalletAddress(pubKey)}
+      />
 
       {/* INTERACTIVE VIDEO MODAL */}
       {isVideoModalOpen && (
