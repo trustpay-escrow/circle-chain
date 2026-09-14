@@ -1,0 +1,13 @@
+# CircleChain Frontend Environment Configuration Sample
+
+# Supabase Public Configuration
+NEXT_PUBLIC_SUPABASE_URL=https://your-supabase-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
+
+# Backend API Service URL
+NEXT_PUBLIC_BACKEND_URL=http://localhost:4000
+
+# Stellar / Soroban Network Configuration
+NEXT_PUBLIC_STELLAR_NETWORK=FUTURENET
+NEXT_PUBLIC_SOROBAN_RPC_URL=https://rpc-futurenet.stellar.org
+NEXT_PUBLIC_CONTRACT_ID=C...
