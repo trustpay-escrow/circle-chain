@@ -2,9 +2,12 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { createCircleApi } from '../../../lib/api';
+import { Loader2 } from 'lucide-react';
 
 export default function CreateCirclePage() {
   const router = useRouter();
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -13,13 +16,36 @@ export default function CreateCirclePage() {
     memberCount: 5,
     collateralRequired: 50,
     payoutMode: 'Fixed',
+    creatorAddress: 'GABC1234567890WXYZ1234567890'
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Call Soroban create_circle contract function & Supabase insert
-    alert('Circle Creation initialized on Stellar testnet!');
-    router.push('/circles');
+    setIsSubmitting(true);
+
+    try {
+      const result = await createCircleApi({
+        name: formData.name,
+        description: formData.description,
+        creator_address: formData.creatorAddress,
+        contribution_amount: formData.contributionAmount,
+        interval_days: formData.intervalDays,
+        member_count: formData.memberCount,
+        collateral_required: formData.collateralRequired,
+        payout_mode: formData.payoutMode
+      });
+
+      if (result) {
+        alert('✨ Circle successfully created and saved to database!');
+        router.push('/circles');
+      } else {
+        alert('Failed to save circle to database. Please check your backend connection.');
+      }
+    } catch (err: any) {
+      alert(`Error creating circle: ${err?.message || 'Unknown error'}`);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -109,9 +135,17 @@ export default function CreateCirclePage() {
 
         <button
           type="submit"
-          className="w-full py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold text-sm shadow-lg shadow-emerald-500/20 transition-all"
+          disabled={isSubmitting}
+          className="w-full py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold text-sm shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center space-x-2 disabled:opacity-50"
         >
-          Initialize Circle on Soroban
+          {isSubmitting ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>Saving Circle to Database...</span>
+            </>
+          ) : (
+            <span>Initialize Circle & Save to Database</span>
+          )}
         </button>
       </form>
     </div>
