@@ -1,0 +1,632 @@
+[
+  {
+    "id": "ISSUE-01",
+    "title": "feat(contracts): implement Soroban RPC event parser daemon for cycle contribution logs",
+    "complexity": "High",
+    "points": 200,
+    "domain": "Domain Engine & Smart Contracts",
+    "summary": "Build a background RPC listener service that polls Soroban contract events on Stellar Futurenet and updates cycle contribution states in real time.",
+    "proposedSolution": "Use Stellar SDK RPC Event Subscription APIs to listen for topics matching 'cycle_paid', filter by circle_id, and execute batch inserts into Supabase 'contributions' table.",
+    "acceptanceCriteria": [
+      "RPC daemon polls Futurenet events without missing topics during network latency",
+      "Successfully parses 'cycle_paid' and 'payout_released' events",
+      "Updates contribution matrix in Supabase automatically"
+    ],
+    "labels": ["contracts", "backend", "complexity:high", "200-pts"]
+  },
+  {
+    "id": "ISSUE-02",
+    "title": "feat(contracts): add dynamic interest yield redistribution for idle ROSCA collateral",
+    "complexity": "High",
+    "points": 200,
+    "domain": "Domain Engine & Smart Contracts",
+    "summary": "Integrate Soroban DeFi yield adapter to earn interest on locked ROSCA collateral during active savings cycles.",
+    "proposedSolution": "Extend contracts/src/member.rs to interface with Soroban liquidity pool contracts, depositing collateral to generate interest distributed to compliant members upon circle completion.",
+    "acceptanceCriteria": [
+      "Locked collateral earns yield without compromising principal security",
+      "Yield allocation calculation scales accurately across member counts",
+      "Rust unit test suite passes with 100% coverage"
+    ],
+    "labels": ["contracts", "soroban", "complexity:high", "200-pts"]
+  },
+  {
+    "id": "ISSUE-03",
+    "title": "feat(backend): implement BullMQ background job queue for automated deadline warnings",
+    "complexity": "High",
+    "points": 200,
+    "domain": "Async Workflows & Data Pipelines",
+    "summary": "Set up a persistent Redis-backed BullMQ queue to schedule and send contribution due notifications 24 hours prior to cycle expiry.",
+    "proposedSolution": "Add BullMQ worker process in Express backend that queries active circles, calculates cycle deadline timestamps, and enqueues warning jobs.",
+    "acceptanceCriteria": [
+      "Jobs are scheduled dynamically based on circle interval_days",
+      "Failed jobs retry automatically with exponential backoff",
+      "Notifications are recorded in Supabase 'notifications' table"
+    ],
+    "labels": ["backend", "queue", "complexity:high", "200-pts"]
+  },
+  {
+    "id": "ISSUE-04",
+    "title": "feat(contracts): implement automated grace period calculation and default slashing guard",
+    "complexity": "High",
+    "points": 200,
+    "domain": "Domain Engine & Smart Contracts",
+    "summary": "Enforce automated collateral slashing logic when a member fails to contribute within the designated grace period.",
+    "proposedSolution": "Update contracts/src/default_logic.rs to evaluate current block timestamp against cycle deadline + grace period, transferring slashed collateral to pot recipients.",
+    "acceptanceCriteria": [
+      "Slashing cannot trigger prior to grace period expiration",
+      "Defaulted member is marked as Defaulted in roster",
+      "Remaining collateral is redistributed to non-defaulting members"
+    ],
+    "labels": ["contracts", "security", "complexity:high", "200-pts"]
+  },
+  {
+    "id": "ISSUE-05",
+    "title": "feat(security): implement Soroban payload HMAC signature verification middleware",
+    "complexity": "High",
+    "points": 200,
+    "domain": "Security, Validation & Access Control",
+    "summary": "Protect Express backend notification and indexer endpoints against unauthorized payload injection.",
+    "proposedSolution": "Add express middleware verifying HMAC-SHA256 signatures generated using shared secret keys for all incoming RPC webhook payloads.",
+    "acceptanceCriteria": [
+      "Requests missing valid HMAC headers are rejected with 401 Unauthorized",
+      "Timing attack resistant comparison implemented",
+      "Unit tests cover valid, missing, and tampered signatures"
+    ],
+    "labels": ["security", "backend", "complexity:high", "200-pts"]
+  },
+  {
+    "id": "ISSUE-06",
+    "title": "feat(frontend): implement real-time WebSocket connection for live contribution matrix",
+    "complexity": "High",
+    "points": 200,
+    "domain": "User Interface / Consumer Surface",
+    "summary": "Upgrade the ContributionGrid component to update payment states live via WebSockets when cycle payments occur.",
+    "proposedSolution": "Subscribe to backend Socket.io / Supabase Realtime channel for 'contributions' table changes and trigger animated matrix tile updates.",
+    "acceptanceCriteria": [
+      "Matrix grid tiles update without full page refresh",
+      "Connection automatically reconnects if socket drops",
+      "Visual indicators animate when contribution is verified"
+    ],
+    "labels": ["frontend", "websockets", "complexity:high", "200-pts"]
+  },
+  {
+    "id": "ISSUE-07",
+    "title": "feat(contracts): implement bidding-based ROSCA payout selection algorithm",
+    "complexity": "High",
+    "points": 200,
+    "domain": "Domain Engine & Smart Contracts",
+    "summary": "Add support for bidding ROSCA mode where members bid a discount fee to receive early pot payouts.",
+    "proposedSolution": "Implement smart contract bidding mechanism in contracts/src/payout.rs allowing members to submit discount bids; lowest bid wins pot payout.",
+    "acceptanceCriteria": [
+      "Discount bid is deducted from pot and distributed to remaining members",
+      "Winner cannot bid in subsequent cycles of same circle",
+      "Rust contract tests verify edge cases with tied bids"
+    ],
+    "labels": ["contracts", "soroban", "complexity:high", "200-pts"]
+  },
+  {
+    "id": "ISSUE-08",
+    "title": "feat(contracts): add randomized turn selection engine using commit-reveal randomness",
+    "complexity": "High",
+    "points": 200,
+    "domain": "Domain Engine & Smart Contracts",
+    "summary": "Implement provably fair turn order allocation for randomized ROSCA circles.",
+    "proposedSolution": "Create commit-reveal protocol in Soroban smart contract where members submit hashed seeds during forming phase to compute deterministic payout order.",
+    "acceptanceCriteria": [
+      "Turn order is verifiable on-chain and immune to creator manipulation",
+      "Failsafe fallback if member fails to reveal seed",
+      "Contract tests confirm unbiased distribution"
+    ],
+    "labels": ["contracts", "cryptography", "complexity:high", "200-pts"]
+  },
+  {
+    "id": "ISSUE-09",
+    "title": "feat(backend): implement multi-node Stellar RPC fallback provider engine",
+    "complexity": "High",
+    "points": 200,
+    "domain": "Async Workflows & Data Pipelines",
+    "summary": "Prevent indexer downtime by configuring automatic failover between multiple Stellar RPC endpoints.",
+    "proposedSolution": "Build RPC provider pool manager that monitors endpoint latency/error rates and seamlessly reroutes requests if primary RPC fails.",
+    "acceptanceCriteria": [
+      "Switches to secondary RPC within 500ms of primary timeout",
+      "Health check periodically tests primary RPC recovery",
+      "Logs RPC switch events for audit tracking"
+    ],
+    "labels": ["backend", "stellar", "complexity:high", "200-pts"]
+  },
+  {
+    "id": "ISSUE-10",
+    "title": "feat(frontend): build interactive ROSCA yield & fee calculator component",
+    "complexity": "High",
+    "points": 200,
+    "domain": "User Interface / Consumer Surface",
+    "summary": "Create an interactive visual calculator allowing users to simulate pot returns, collateral requirements, and cycle timelines.",
+    "proposedSolution": "Build dynamic React component with slider controls for contribution amount, member count, and interval days calculating total pot and collateral return.",
+    "acceptanceCriteria": [
+      "Calculations update dynamically in real time without lag",
+      "Supports USDC and XLM token options",
+      "Mobile responsive layout with clear visual graphs"
+    ],
+    "labels": ["frontend", "react", "complexity:high", "200-pts"]
+  },
+  {
+    "id": "ISSUE-11",
+    "title": "feat(contracts): implement Soulbound Token (SBT) reputation badge minting",
+    "complexity": "High",
+    "points": 200,
+    "domain": "Domain Engine & Smart Contracts",
+    "summary": "Mint non-transferable Soulbound Tokens (SBT) on Stellar to attest member completion of savings circles.",
+    "proposedSolution": "Develop Soroban contract endpoint that issues immutable reputation badges to member public keys upon successful circle completion.",
+    "acceptanceCriteria": [
+      "SBT tokens are non-transferable between accounts",
+      "Badge metadata stores completed circle metrics",
+      "Contract verifies non-default status before minting"
+    ],
+    "labels": ["contracts", "sbt", "complexity:high", "200-pts"]
+  },
+  {
+    "id": "ISSUE-12",
+    "title": "feat(backend): implement CSV & PDF transaction export generator service",
+    "complexity": "High",
+    "points": 200,
+    "domain": "Async Workflows & Data Pipelines",
+    "summary": "Allow circle creators and members to export cryptographic audit history as CSV and PDF reports.",
+    "proposedSolution": "Create Express endpoint `/api/circles/:id/export` utilizing pdfkit and json2csv to format contributions, payouts, and tx hashes into downloadable files.",
+    "acceptanceCriteria": [
+      "Exports complete circle history including tx hashes",
+      "PDF formatting includes official CircleChain branding and checksums",
+      "Generates files asynchronously for large transaction logs"
+    ],
+    "labels": ["backend", "export", "complexity:high", "200-pts"]
+  },
+  {
+    "id": "ISSUE-13",
+    "title": "feat(security): implement Rate Limiting & Bot Protection Middleware",
+    "complexity": "High",
+    "points": 200,
+    "domain": "Security, Validation & Access Control",
+    "summary": "Protect public API endpoints against denial-of-service and automated bot spamming.",
+    "proposedSolution": "Configure express-rate-limit and Redis store to enforce per-IP and per-wallet request quotas across API endpoints.",
+    "acceptanceCriteria": [
+      "Limits API requests to 100 requests per minute per IP",
+      "Returns HTTP 429 Too Many Requests when quota exceeded",
+      "Exempts health check endpoints"
+    ],
+    "labels": ["security", "backend", "complexity:high", "200-pts"]
+  },
+  {
+    "id": "ISSUE-14",
+    "title": "feat(contracts): implement emergency pause & multi-sig admin recovery circuit breaker",
+    "complexity": "High",
+    "points": 200,
+    "domain": "Domain Engine & Smart Contracts",
+    "summary": "Incorporate emergency pause mechanism in Soroban contracts to freeze funds during critical security anomalies.",
+    "proposedSolution": "Add emergency pause state variable controlled by multi-signature admin key requirement in contracts/src/lib.rs.",
+    "acceptanceCriteria": [
+      "Admin multi-sig requirement prevents single key vulnerability",
+      "When paused, new contributions and payouts are temporarily halted",
+      "Unpause action requires multi-sig threshold confirmation"
+    ],
+    "labels": ["contracts", "security", "complexity:high", "200-pts"]
+  },
+  {
+    "id": "ISSUE-15",
+    "title": "feat(frontend): implement dark/light theme switching with custom CSS design tokens",
+    "complexity": "High",
+    "points": 200,
+    "domain": "User Interface / Consumer Surface",
+    "summary": "Enable user theme toggling between dark mode and sleek light mode using CSS variables.",
+    "proposedSolution": "Integrate next-themes provider, updating index.css color tokens to support light and dark theme palettes seamlessly.",
+    "acceptanceCriteria": [
+      "Theme persists across browser reloads",
+      "No UI flickering on initial page load",
+      "All text contrast ratios meet WCAG AA accessibility standards"
+    ],
+    "labels": ["frontend", "theme", "complexity:high", "200-pts"]
+  },
+  {
+    "id": "ISSUE-16",
+    "title": "feat(backend): implement automated Supabase database migration runner script",
+    "complexity": "High",
+    "points": 200,
+    "domain": "Developer Experience & Tooling",
+    "summary": "Create automated schema migration CLI script for backend deployments.",
+    "proposedSolution": "Build TypeScript migration runner executing SQL scripts in version order against Supabase PostgreSQL database.",
+    "acceptanceCriteria": [
+      "Tracks applied migrations in schema_migrations table",
+      "Rolls back failed migration transactions cleanly",
+      "Runs seamlessly in CI/CD pipeline"
+    ],
+    "labels": ["backend", "database", "complexity:high", "200-pts"]
+  },
+  {
+    "id": "ISSUE-17",
+    "title": "feat(contracts): implement cross-token collateral converter via Stellar DEX path payment",
+    "complexity": "High",
+    "points": 200,
+    "domain": "Domain Engine & Smart Contracts",
+    "summary": "Allow members to stake collateral in XLM or native Stellar assets which auto-convert to USDC collateral.",
+    "proposedSolution": "Interface Soroban contract with Stellar DEX Path Payment engine to execute atomic asset swaps on collateral deposit.",
+    "acceptanceCriteria": [
+      "Executes path payment swap atomically within transaction",
+      "Reverts deposit if slippage exceeds 1%",
+      "Calculates exact USDC collateral equivalence"
+    ],
+    "labels": ["contracts", "stellar", "complexity:high", "200-pts"]
+  },
+  {
+    "id": "ISSUE-18",
+    "title": "feat(frontend): build interactive circle member roster management modal",
+    "complexity": "High",
+    "points": 200,
+    "domain": "User Interface / Consumer Surface",
+    "summary": "Create dashboard UI component displaying detailed member profiles, collateral status, and turn order.",
+    "proposedSolution": "Build React modal displaying roster member avatars, public keys, punctual payment percentages, and SBT reputation badges.",
+    "acceptanceCriteria": [
+      "Lists all members with verified collateral status badges",
+      "Provides clickable links to StellarExpert block explorer",
+      "Fully responsive on mobile devices"
+    ],
+    "labels": ["frontend", "ui", "complexity:high", "200-pts"]
+  },
+  {
+    "id": "ISSUE-19",
+    "title": "feat(backend): implement Prometheus & Grafana metrics exporter endpoint",
+    "complexity": "High",
+    "points": 200,
+    "domain": "Developer Experience & Tooling",
+    "summary": "Expose operational metrics endpoint for monitoring backend Express server health and RPC latency.",
+    "proposedSolution": "Integrate prom-client library in Express backend exposing `/metrics` endpoint tracking HTTP request rate, error rates, and Supabase query latency.",
+    "acceptanceCriteria": [
+      "Exposes standard Prometheus metrics format",
+      "Tracks active WebSocket connection counts",
+      "Protected by metric token authentication"
+    ],
+    "labels": ["backend", "monitoring", "complexity:high", "200-pts"]
+  },
+  {
+    "id": "ISSUE-20",
+    "title": "feat(contracts): implement automated pot disbursement fallback for inactive recipients",
+    "complexity": "High",
+    "points": 200,
+    "domain": "Domain Engine & Smart Contracts",
+    "summary": "Ensure pot funds are not locked indefinitely if a cycle recipient fails to claim their pot release.",
+    "proposedSolution": "Add fallback timer in contract enabling non-recipient members to trigger pot release to recipient after 14 days of inactivity.",
+    "acceptanceCriteria": [
+      "Recipient receives full pot minus gas reimbursement to caller",
+      "Cannot be triggered before 14-day inactivity timer expires",
+      "Contract state transitions cleanly to next cycle"
+    ],
+    "labels": ["contracts", "soroban", "complexity:high", "200-pts"]
+  },
+  {
+    "id": "ISSUE-21",
+    "title": "feat(frontend): implement internationalization (i18n) support for English, French, and Yoruba",
+    "complexity": "High",
+    "points": 200,
+    "domain": "User Interface / Consumer Surface",
+    "summary": "Add multi-language localization to support ROSCA users across West Africa and global markets.",
+    "proposedSolution": "Integrate next-intl library with translation files for English (en), French (fr), and Yoruba (yo).",
+    "acceptanceCriteria": [
+      "User can switch language seamlessly via dropdown in navbar",
+      "All landing page and dashboard copy is localized",
+      "Language choice is persisted in local storage"
+    ],
+    "labels": ["frontend", "i18n", "complexity:high", "200-pts"]
+  },
+  {
+    "id": "ISSUE-22",
+    "title": "feat(security): implement Content Security Policy (CSP) & CORS security headers",
+    "complexity": "High",
+    "points": 200,
+    "domain": "Security, Validation & Access Control",
+    "summary": "Harden Next.js frontend and Express backend against cross-site scripting (XSS) and clickjacking.",
+    "proposedSolution": "Configure helmet middleware in Express and HTTP security headers in next.config.js specifying strict CSP rules.",
+    "acceptanceCriteria": [
+      "Restricts script sources to trusted domains",
+      "Enforces X-Frame-Options: DENY and X-Content-Type-Options: nosniff",
+      "SecurityHeaders score achieves Grade A on SecurityHeaders.com"
+    ],
+    "labels": ["security", "frontend", "complexity:high", "200-pts"]
+  },
+  {
+    "id": "ISSUE-23",
+    "title": "feat(backend): implement automated error reporting & Sentry integration",
+    "complexity": "High",
+    "points": 200,
+    "domain": "Developer Experience & Tooling",
+    "summary": "Capture uncaught exceptions and unhandled promise rejections across production servers.",
+    "proposedSolution": "Configure @sentry/node in Express backend and @sentry/nextjs in frontend to record stack traces and error metadata.",
+    "acceptanceCriteria": [
+      "Errors automatically create Sentry alerts with stack trace",
+      "Sensitive wallet keys and secrets are scrubbed before transmission",
+      "Disables logging in local development mode"
+    ],
+    "labels": ["backend", "sentry", "complexity:high", "200-pts"]
+  },
+  {
+    "id": "ISSUE-24",
+    "title": "feat(contracts): implement upgradeable smart contract protocol pattern",
+    "complexity": "High",
+    "points": 200,
+    "domain": "Domain Engine & Smart Contracts",
+    "summary": "Enable zero-downtime Soroban contract upgrades via Wasm code hash substitution.",
+    "proposedSolution": "Incorporate Soroban `env.deployer().update_current_contract_wasm()` pattern requiring multi-sig admin approval for Wasm hash updates.",
+    "acceptanceCriteria": [
+      "Contract Wasm code hash updates without state corruption",
+      "Only authorized multi-sig admin can execute upgrade action",
+      "Comprehensive test verifies state preservation post-upgrade"
+    ],
+    "labels": ["contracts", "soroban", "complexity:high", "200-pts"]
+  },
+  {
+    "id": "ISSUE-25",
+    "title": "feat(frontend): build interactive ROSCA circle activity feed & notification center",
+    "complexity": "High",
+    "points": 200,
+    "domain": "User Interface / Consumer Surface",
+    "summary": "Create notification center component displaying real-time cycle updates, payment reminders, and payout alerts.",
+    "proposedSolution": "Build slide-over notification drawer component fetching user notifications from `/api/notifications/:wallet` with unread counter badge.",
+    "acceptanceCriteria": [
+      "Notification drawer opens smoothly from navbar icon",
+      "Allows marking notifications as read",
+      "Displays real-time badges for new alerts"
+    ],
+    "labels": ["frontend", "ui", "complexity:high", "200-pts"]
+  },
+  {
+    "id": "ISSUE-26",
+    "title": "feat(backend): implement Stellar public key validation & checksum validator middleware",
+    "complexity": "Medium",
+    "points": 150,
+    "domain": "Security, Validation & Access Control",
+    "summary": "Add request validation middleware to check Stellar public key formatting before processing API requests.",
+    "proposedSolution": "Create middleware using `@stellar/stellar-sdk` StrKey validator to verify string starts with 'G' and passes ed25519 CRC16 checksum.",
+    "acceptanceCriteria": [
+      "Rejects malformed addresses with HTTP 400 Bad Request",
+      "Passes valid Stellar public keys cleanly",
+      "Unit tests cover valid and invalid address strings"
+    ],
+    "labels": ["backend", "validation", "complexity:medium", "150-pts"]
+  },
+  {
+    "id": "ISSUE-27",
+    "title": "feat(frontend): add search and category filter controls to Discover Circles page",
+    "complexity": "Medium",
+    "points": 150,
+    "domain": "User Interface / Consumer Surface",
+    "summary": "Enhance `/circles` page with search input and category filter buttons.",
+    "proposedSolution": "Add stateful search input and filter buttons (e.g. Business, DeFi, General Savings) filtering circle list dynamically.",
+    "acceptanceCriteria": [
+      "Search filters circles by name and description",
+      "Category tabs filter list accurately",
+      "Empty state message shown when no matches found"
+    ],
+    "labels": ["frontend", "react", "complexity:medium", "150-pts"]
+  },
+  {
+    "id": "ISSUE-28",
+    "title": "feat(contracts): implement unit test suite for member registration edge cases",
+    "complexity": "Medium",
+    "points": 150,
+    "domain": "Developer Experience & Tooling",
+    "summary": "Expand Rust test suite in `contracts/src/test.rs` to cover duplicate registration and insufficient collateral errors.",
+    "proposedSolution": "Add test functions verifying `AlreadyJoined` and `InsufficientCollateral` error codes when member registers.",
+    "acceptanceCriteria": [
+      "Tests verify contract panics with correct error code",
+      "`cargo test` passes cleanly with 100% assertions",
+      "Cover duplicate wallet registration attempts"
+    ],
+    "labels": ["contracts", "testing", "complexity:medium", "150-pts"]
+  },
+  {
+    "id": "ISSUE-29",
+    "title": "feat(backend): implement structured JSON logger using Winston",
+    "complexity": "Medium",
+    "points": 150,
+    "domain": "Developer Experience & Tooling",
+    "summary": "Replace console.log statements in Express backend with structured JSON logger.",
+    "proposedSolution": "Configure Winston logger with timestamp, log level, and request correlation IDs outputting formatted JSON logs.",
+    "acceptanceCriteria": [
+      "Logs HTTP status codes, response times, and path",
+      "Scrubs sensitive environment variables",
+      "Outputs clean JSON lines for production log aggregators"
+    ],
+    "labels": ["backend", "logging", "complexity:medium", "150-pts"]
+  },
+  {
+    "id": "ISSUE-30",
+    "title": "feat(frontend): implement copy-to-clipboard button with toast feedback for Stellar addresses",
+    "complexity": "Medium",
+    "points": 150,
+    "domain": "User Interface / Consumer Surface",
+    "summary": "Add interactive copy button beside truncated wallet addresses throughout frontend.",
+    "proposedSolution": "Build reusable CopyButton component using `navigator.clipboard.writeText` triggering Sonner toast message on copy.",
+    "acceptanceCriteria": [
+      "Copies full 56-character public key to clipboard",
+      "Displays 'Copied to clipboard' Sonner toast message",
+      "Provides visual checkmark icon state on click"
+    ],
+    "labels": ["frontend", "ui", "complexity:medium", "150-pts"]
+  },
+  {
+    "id": "ISSUE-31",
+    "title": "feat(backend): add Supabase database connection health monitoring endpoint",
+    "complexity": "Medium",
+    "points": 150,
+    "domain": "Async Workflows & Data Pipelines",
+    "summary": "Enhance backend `/health` route to test active database queries and report detailed status.",
+    "proposedSolution": "Update `backend/src/server.ts` health endpoint to execute ping query against Supabase and return execution latency in response.",
+    "acceptanceCriteria": [
+      "Returns HTTP 200 with database latency when connected",
+      "Returns HTTP 503 Service Unavailable when database unreachable",
+      "Response payload includes timestamp and mode status"
+    ],
+    "labels": ["backend", "health", "complexity:medium", "150-pts"]
+  },
+  {
+    "id": "ISSUE-32",
+    "title": "feat(frontend): implement Skeleton loader state components for circle cards",
+    "complexity": "Medium",
+    "points": 150,
+    "domain": "User Interface / Consumer Surface",
+    "summary": "Replace spinner loaders on `/circles` page with animated skeleton loader placeholders.",
+    "proposedSolution": "Create SkeletonCard component matching dimensions of circle cards with pulse animation during data fetching.",
+    "acceptanceCriteria": [
+      "Displays 4 skeleton cards while API request is pending",
+      "Smooth fade transition to loaded circle cards",
+      "Matches dark mode slate styling"
+    ],
+    "labels": ["frontend", "ux", "complexity:medium", "150-pts"]
+  },
+  {
+    "id": "ISSUE-33",
+    "title": "feat(security): implement input sanitation helper for circle creation form",
+    "complexity": "Medium",
+    "points": 150,
+    "domain": "Security, Validation & Access Control",
+    "summary": "Sanitize user inputs in circle creation form to prevent HTML injection and payload script tags.",
+    "proposedSolution": "Add DOMPurify sanitation library in frontend before submitting circle name and description payloads.",
+    "acceptanceCriteria": [
+      "Strips HTML tags and script elements from input strings",
+      "Allows standard punctuation and emojis",
+      "Unit test verifies string sanitation"
+    ],
+    "labels": ["security", "frontend", "complexity:medium", "150-pts"]
+  },
+  {
+    "id": "ISSUE-34",
+    "title": "feat(frontend): add network selector switch for Stellar Testnet and Futurenet",
+    "complexity": "Medium",
+    "points": 150,
+    "domain": "User Interface / Consumer Surface",
+    "summary": "Allow users to toggle network connection between Futurenet and Testnet.",
+    "proposedSolution": "Add network selector dropdown in navbar updating `STELLAR_NETWORK` configuration in local state.",
+    "acceptanceCriteria": [
+      "Network choice updates RPC URL dynamically",
+      "Displays current active network pill badge in navbar",
+      "Persists network choice in local storage"
+    ],
+    "labels": ["frontend", "stellar", "complexity:medium", "150-pts"]
+  },
+  {
+    "id": "ISSUE-35",
+    "title": "feat(backend): implement automated API route request timing tracer",
+    "complexity": "Medium",
+    "points": 150,
+    "domain": "Developer Experience & Tooling",
+    "summary": "Add middleware to measure response execution time for Express API endpoints.",
+    "proposedSolution": "Add response header `X-Response-Time` and log requests exceeding 500ms threshold.",
+    "acceptanceCriteria": [
+      "Injects X-Response-Time header in all HTTP responses",
+      "Logs warning for slow API endpoints (>500ms)",
+      "Zero impact on request processing speed"
+    ],
+    "labels": ["backend", "performance", "complexity:medium", "150-pts"]
+  },
+  {
+    "id": "ISSUE-36",
+    "title": "feat(frontend): implement breadcrumb navigation bar component",
+    "complexity": "Medium",
+    "points": 150,
+    "domain": "User Interface / Consumer Surface",
+    "summary": "Add dynamic breadcrumb navigation bar to nested circle dashboard pages.",
+    "proposedSolution": "Build Breadcrumbs component parsing current Next.js pathname and rendering clickable parent links.",
+    "acceptanceCriteria": [
+      "Renders 'Home > Circles > [Circle Name]' hierarchy",
+      "Parent links navigate to correct route",
+      "Accessible aria-label navigation markup"
+    ],
+    "labels": ["frontend", "ui", "complexity:medium", "150-pts"]
+  },
+  {
+    "id": "ISSUE-37",
+    "title": "docs: update README.md with detailed quickstart and architecture diagrams",
+    "complexity": "Trivial",
+    "points": 100,
+    "domain": "Developer Experience & Tooling",
+    "summary": "Update root README.md with badges, quickstart instructions, and system data flow.",
+    "proposedSolution": "Add GitHub Actions workflow badges, local environment setup steps, and ASCII architecture diagram.",
+    "acceptanceCriteria": [
+      "README formatting renders cleanly on GitHub",
+      "All setup commands verified working",
+      "Includes maintainer contact links"
+    ],
+    "labels": ["documentation", "complexity:trivial", "100-pts"]
+  },
+  {
+    "id": "ISSUE-38",
+    "title": "style(frontend): fix mobile padding and responsive container bounds on landing page",
+    "complexity": "Trivial",
+    "points": 100,
+    "domain": "User Interface / Consumer Surface",
+    "summary": "Adjust container padding on mobile viewports (<640px) to prevent horizontal scrolling.",
+    "proposedSolution": "Update Tailwind CSS utility classes on landing page section wrappers from `px-8` to `px-4 sm:px-8`.",
+    "acceptanceCriteria": [
+      "No horizontal scrollbar present on 375px mobile screen width",
+      "Landing page sections align visually",
+      "Tested across Chrome and Safari iOS viewports"
+    ],
+    "labels": ["frontend", "css", "complexity:trivial", "100-pts"]
+  },
+  {
+    "id": "ISSUE-39",
+    "title": "ci: add lint script to frontend package.json for clean CI execution",
+    "complexity": "Trivial",
+    "points": 100,
+    "domain": "Developer Experience & Tooling",
+    "summary": "Configure non-interactive ESLint config in frontend so `npm run lint` completes cleanly.",
+    "proposedSolution": "Add `.eslintrc.json` extending `next/core-web-vitals` to eliminate prompt requirement.",
+    "acceptanceCriteria": [
+      "`npm run lint` executes non-interactively",
+      "Returns 0 lint errors",
+      "Runs successfully in CI workflow"
+    ],
+    "labels": ["ci", "eslint", "complexity:trivial", "100-pts"]
+  },
+  {
+    "id": "ISSUE-40",
+    "title": "chore: add .env.example templates for frontend and backend directories",
+    "complexity": "Trivial",
+    "points": 100,
+    "domain": "Developer Experience & Tooling",
+    "summary": "Ensure developer environment template files exist with placeholder keys.",
+    "proposedSolution": "Create `frontend/.env.example` and `backend/.env.example` with documented environment variable keys.",
+    "acceptanceCriteria": [
+      "Files contain all required environment variable keys",
+      "No real API secrets or private keys contained",
+      "Instructions included as comment blocks"
+    ],
+    "labels": ["chore", "complexity:trivial", "100-pts"]
+  },
+  {
+    "id": "ISSUE-41",
+    "title": "docs: add inline JSDoc comments to Stellar SDK helper functions",
+    "complexity": "Trivial",
+    "points": 100,
+    "domain": "Developer Experience & Tooling",
+    "summary": "Add JSDoc documentation to functions in `frontend/lib/stellar.ts` and `frontend/lib/api.ts`.",
+    "proposedSolution": "Document parameters, return types, and potential error states for wallet connection helpers.",
+    "acceptanceCriteria": [
+      "All exported functions have JSDoc comment blocks",
+      "Hover tooltips display cleanly in VS Code",
+      "No missing parameter descriptions"
+    ],
+    "labels": ["documentation", "complexity:trivial", "100-pts"]
+  },
+  {
+    "id": "ISSUE-42",
+    "title": "style: add custom scrollbar styling for dark mode dashboard panels",
+    "complexity": "Trivial",
+    "points": 100,
+    "domain": "User Interface / Consumer Surface",
+    "summary": "Style custom scrollbars in dashboard drawer and modal components.",
+    "proposedSolution": "Add `.custom-scrollbar` utility in `globals.css` with dark slate thumb and transparent track.",
+    "acceptanceCriteria": [
+      "Scrollbars render with sleek dark styling",
+      "Works consistently in WebKit and Firefox browsers",
+      "Matches overall glassmorphism design aesthetic"
+    ],
+    "labels": ["frontend", "css", "complexity:trivial", "100-pts"]
+  }
+]

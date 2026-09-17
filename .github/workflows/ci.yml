@@ -1,0 +1,77 @@
+name: CircleChain CI Pipeline ⭕
+
+on:
+  push:
+    branches: [ main, feature/* ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  soroban-contracts:
+    name: Build & Test Soroban Smart Contracts (Rust)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            contracts/target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run Cargo Check
+        run: cd contracts && cargo check
+
+      - name: Run Soroban Contract Tests
+        run: cd contracts && cargo test
+
+      - name: Build Wasm Contract Binary
+        run: cd contracts && cargo build --target wasm32-unknown-unknown --release
+
+  backend-api:
+    name: Typecheck & Test Backend API (Node / Express)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install Dependencies
+        run: cd backend && npm ci
+
+      - name: Run TypeScript Typecheck
+        run: cd backend && npx tsc --noEmit
+
+  frontend-web:
+    name: Typecheck & Build Next.js Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Dependencies
+        run: cd frontend && npm ci
+
+      - name: Run TypeScript Typecheck
+        run: cd frontend && npx tsc --noEmit
+
+      - name: Build Next.js Production App
+        run: cd frontend && npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: "https://placeholder.supabase.co"
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: "placeholder-key"
+          NEXT_PUBLIC_BACKEND_URL: "http://localhost:4000"

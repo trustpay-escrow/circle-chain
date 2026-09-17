@@ -1,0 +1,35 @@
+name: 💡 Feature Request
+description: Propose a new feature or improvement for CircleChain
+title: '[FEAT]: '
+labels: ['enhancement']
+body:
+  - type: markdown
+    attributes:
+      value: Suggest an idea or feature request for CircleChain!
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: Is your feature request related to a problem or user friction point?
+      placeholder: I'm always frustrated when...
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: Describe the solution or feature you would like to see implemented.
+      placeholder: Describe proposed solution...
+    validations:
+      required: true
+  - type: dropdown
+    id: complexity
+    attributes:
+      label: Proposed Drips Complexity Level
+      description: Estimate the Drips Wave complexity level for this task.
+      options:
+        - 'Trivial (100 Points)'
+        - 'Medium (150 Points)'
+        - 'High (200 Points)'
+    validations:
+      required: true

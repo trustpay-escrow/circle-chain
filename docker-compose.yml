@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "4000:4000"
+    environment:
+      - PORT=4000
+      - SUPABASE_URL=${SUPABASE_URL:-https://wmruqlrogqwllkdodlna.supabase.co}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-placeholder}
+      - STELLAR_NETWORK=FUTURENET
+      - STELLAR_RPC_URL=https://rpc-futurenet.stellar.org
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_BACKEND_URL=http://backend:4000
+      - NEXT_PUBLIC_SUPABASE_URL=${SUPABASE_URL:-https://wmruqlrogqwllkdodlna.supabase.co}
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-placeholder}
+    depends_on:
+      - backend
+    restart: unless-stopped
