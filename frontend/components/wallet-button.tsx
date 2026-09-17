@@ -6,21 +6,7 @@ import { Button } from './ui/button';
 
 export function WalletButton() {
   const [address, setAddress] = useState<string | null>(null);
-  const [connecting, setConnecting] = useState(false);
-
-  const handleConnect = async () => {
-    setConnecting(true);
-    try {
-      const pubKey = await connectFreighterWallet();
-      if (pubKey) {
-        setAddress(pubKey);
-      }
-    } catch (err) {
-      console.error('Wallet connection error:', err);
-    } finally {
-      setConnecting(false);
-    }
-  };
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   const truncate = (str: string) => `${str.slice(0, 4)}...${str.slice(-4)}`;
 

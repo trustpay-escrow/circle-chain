@@ -1,4 +1,4 @@
-import express, { Request, Response } from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import circlesRouter from './routes/circles';
@@ -10,8 +10,15 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 4000;
 
+// Global Middleware
 app.use(cors());
 app.use(express.json());
+
+// Request logger
+app.use((req: Request, res: Response, next: NextFunction) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
+  next();
+});
 
 // Health check endpoint
 app.get('/health', (req: Request, res: Response) => {
