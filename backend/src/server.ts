@@ -1,7 +1,7 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { isSupabaseConfigured } from './config/supabase';
+import { isSupabaseConfigured, supabase } from './config/supabase';
 
 import circlesRouter from './routes/circles';
 import profilesRouter from './routes/profiles';
@@ -24,11 +24,21 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 });
 
 // Health check endpoint
-app.get('/health', (req: Request, res: Response) => {
+app.get('/health', async (req: Request, res: Response) => {
+  let supabaseStatus = isSupabaseConfigured ? 'connected' : 'mock-fallback';
+  if (supabase) {
+    try {
+      const { error } = await supabase.from('circles').select('id').limit(1);
+      if (error) supabaseStatus = `error: ${error.message}`;
+    } catch (err: any) {
+      supabaseStatus = `error: ${err?.message || 'unknown'}`;
+    }
+  }
+
   res.json({
     status: 'ok',
     service: 'CircleChain Off-Chain Indexer & Notification Worker',
-    supabaseConnected: isSupabaseConfigured,
+    supabase: supabaseStatus,
     timestamp: new Date().toISOString(),
   });
 });
@@ -50,7 +60,20 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   res.status(500).json({ success: false, error: err.message || 'Internal Server Error' });
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`🚀 CircleChain Express Server running on port ${PORT}`);
   console.log(`📡 Supabase Mode: ${isSupabaseConfigured ? 'Connected (Live)' : 'Mock Fallback (Local)'}`);
+
+  if (supabase) {
+    try {
+      const { error } = await supabase.from('circles').select('id').limit(1);
+      if (error) {
+        console.warn('⚠️ Supabase connection test returned an error:', error.message);
+      } else {
+        console.log('✅ Supabase connected successfully!');
+      }
+    } catch (err: any) {
+      console.error('❌ Failed to connect to Supabase:', err?.message || err);
+    }
+  }
 });
