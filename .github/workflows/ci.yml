@@ -14,7 +14,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.77.0
           targets: wasm32-unknown-unknown
       - name: Run Cargo Check
         run: cd contracts && cargo check
