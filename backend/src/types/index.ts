@@ -32,6 +32,7 @@ export interface CircleMember {
 
 export interface UserProfile {
   wallet_address: string;
+  username?: string;
   display_name: string;
   avatar_url?: string;
   bio?: string;

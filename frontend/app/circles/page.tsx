@@ -4,6 +4,9 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Users, Clock, Shield, PlusCircle, Loader2 } from 'lucide-react';
 import { fetchCircles, CircleData } from '../../lib/api';
+import { Card } from '../../components/ui/card';
+import { Badge } from '../../components/ui/badge';
+import { Button } from '../../components/ui/button';
 
 export default function CirclesExplorePage() {
   const [circles, setCircles] = useState<CircleData[]>([]);
@@ -26,12 +29,11 @@ export default function CirclesExplorePage() {
           <h1 className="text-3xl font-extrabold text-white">Explore Savings Circles</h1>
           <p className="text-slate-400 text-sm">Join active ROSCA pools on Stellar or start your own group</p>
         </div>
-        <Link
-          href="/circles/create"
-          className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-sm transition-colors flex items-center space-x-2 shadow-lg shadow-emerald-500/20"
-        >
-          <PlusCircle className="w-4 h-4" />
-          <span>Create New Circle</span>
+        <Link href="/circles/create">
+          <Button variant="gradient" size="md">
+            <PlusCircle className="w-4 h-4 mr-2" />
+            <span>Create New Circle</span>
+          </Button>
         </Link>
       </div>
 
@@ -41,7 +43,7 @@ export default function CirclesExplorePage() {
           <p className="text-slate-400 text-sm">Connecting to Supabase database...</p>
         </div>
       ) : circles.length === 0 ? (
-        <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-12 text-center space-y-4 max-w-lg mx-auto mt-6">
+        <Card className="p-12 text-center space-y-4 max-w-lg mx-auto mt-6">
           <div className="w-16 h-16 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center mx-auto text-2xl font-bold">
             0
           </div>
@@ -49,26 +51,25 @@ export default function CirclesExplorePage() {
           <p className="text-slate-400 text-sm">
             Be the first to launch an automated ROSCA savings pool on Stellar! Define your custom contribution amount, group size, and interval.
           </p>
-          <Link
-            href="/circles/create"
-            className="inline-block px-6 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm transition-all shadow-lg shadow-emerald-500/20"
-          >
-            Create First Circle Now
+          <Link href="/circles/create" className="inline-block">
+            <Button variant="gradient" size="md">
+              Create First Circle Now
+            </Button>
           </Link>
-        </div>
+        </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {circles.map((circle) => (
-            <div
+            <Card
               key={circle.circle_id}
-              className="bg-slate-900 border border-slate-800 hover:border-slate-700 transition-all rounded-2xl p-6 space-y-4 shadow-lg flex flex-col justify-between"
+              className="p-6 space-y-4 flex flex-col justify-between hover:border-slate-700 transition-colors"
             >
               <div className="space-y-3">
                 <div className="flex items-start justify-between">
                   <div>
-                    <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 mb-2">
+                    <Badge variant="default" className="mb-2">
                       {circle.status || 'Forming'}
-                    </span>
+                    </Badge>
                     <h3 className="text-xl font-bold text-white">{circle.name}</h3>
                   </div>
                   <div className="text-right">
@@ -96,14 +97,13 @@ export default function CirclesExplorePage() {
                   </div>
                 </div>
 
-                <Link
-                  href={`/circles/${circle.circle_id}`}
-                  className="block w-full py-2.5 text-center rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 font-medium text-sm transition-colors"
-                >
-                  View Circle Dashboard
+                <Link href={`/circles/${circle.circle_id}`} className="block">
+                  <Button variant="outline" size="md" className="w-full">
+                    View Circle Dashboard
+                  </Button>
                 </Link>
               </div>
-            </div>
+            </Card>
           ))}
         </div>
       )}

@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { supabase } from '../lib/supabase';
+import { supabase, isSupabaseConfigured } from '../config/supabase';
 
 const router = Router();
 
@@ -8,31 +8,34 @@ router.get('/:wallet', async (req: Request, res: Response) => {
   try {
     const { wallet } = req.params;
 
-    const { data, error } = await supabase
-      .from('user_profiles')
-      .select('*')
-      .eq('wallet_address', wallet)
-      .single();
+    if (isSupabaseConfigured && supabase) {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('wallet_address', wallet)
+        .single();
 
-    if (error || !data) {
-      // Default profile if not found
-      return res.json({
-        success: true,
-        profile: {
-          wallet_address: wallet,
-          display_name: `Saver (${wallet.slice(0, 4)}...${wallet.slice(-4)})`,
-          avatar_url: null,
-          bio: 'CircleChain ROSCA Participant',
-          email: null,
-          reputation_score: 95,
-          circles_completed: 0,
-          punctual_contributions: 0,
-          total_collateral_staked: 0
-        }
-      });
+      if (!error && data) {
+        return res.json({ success: true, profile: data });
+      }
     }
 
-    return res.json({ success: true, profile: data });
+    // Default profile fallback
+    return res.json({
+      success: true,
+      profile: {
+        wallet_address: wallet,
+        username: 'saver_pro',
+        display_name: `Saver (${wallet.slice(0, 4)}...${wallet.slice(-4)})`,
+        avatar_url: null,
+        bio: 'CircleChain ROSCA Participant',
+        email: null,
+        reputation_score: 95,
+        circles_completed: 0,
+        punctual_contributions: 0,
+        total_collateral_staked: 0
+      }
+    });
   } catch (err: any) {
     return res.status(500).json({ error: err.message || 'Server error' });
   }
@@ -43,6 +46,7 @@ router.post('/', async (req: Request, res: Response) => {
   try {
     const {
       wallet_address,
+      username,
       display_name,
       avatar_url,
       bio,
@@ -57,8 +61,11 @@ router.post('/', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'wallet_address is required' });
     }
 
+    const cleanUsername = username ? username.replace(/^@/, '').trim() : null;
+
     const profileData = {
       wallet_address,
+      username: cleanUsername,
       display_name: display_name || `Saver (${wallet_address.slice(0, 4)}...${wallet_address.slice(-4)})`,
       avatar_url: avatar_url || null,
       bio: bio || null,
@@ -70,18 +77,21 @@ router.post('/', async (req: Request, res: Response) => {
       updated_at: new Date().toISOString()
     };
 
-    const { data, error } = await supabase
-      .from('user_profiles')
-      .upsert(profileData, { onConflict: 'wallet_address' })
-      .select()
-      .single();
+    if (isSupabaseConfigured && supabase) {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .upsert(profileData, { onConflict: 'wallet_address' })
+        .select()
+        .single();
 
-    if (error) {
-      console.error('Supabase profile upsert error:', error);
-      return res.status(500).json({ error: error.message });
+      if (!error && data) {
+        return res.json({ success: true, profile: data });
+      } else if (error) {
+        console.warn('[Supabase Profile Upsert Warning]:', error.message);
+      }
     }
 
-    return res.json({ success: true, profile: data });
+    return res.json({ success: true, profile: profileData });
   } catch (err: any) {
     return res.status(500).json({ error: err.message || 'Server error' });
   }

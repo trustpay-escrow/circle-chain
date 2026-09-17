@@ -21,6 +21,7 @@ export interface CircleData {
 
 export interface UserProfileData {
   wallet_address: string;
+  username?: string;
   display_name?: string;
   avatar_url?: string;
   bio?: string;

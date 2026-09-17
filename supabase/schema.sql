@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS circles_metadata (
 -- 2. Off-Chain User Profiles & SBT Reputation Metrics
 CREATE TABLE IF NOT EXISTS user_profiles (
     wallet_address VARCHAR(64) PRIMARY KEY, -- Stellar public key (G...)
+    username VARCHAR(50) UNIQUE, -- Unique handle (@username)
     display_name VARCHAR(100),
     avatar_url TEXT,
     bio TEXT,
