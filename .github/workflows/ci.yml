@@ -15,6 +15,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
+      - name: Update Cargo Dependencies
+        run: cd contracts && cargo update -p ethnum
       - name: Run Cargo Check
         run: cd contracts && cargo check
       - name: Run Soroban Contract Tests
