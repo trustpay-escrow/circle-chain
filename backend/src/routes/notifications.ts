@@ -1,130 +1,97 @@
 import { Router, Request, Response } from 'express';
-import { supabase, isSupabaseConfigured } from '../config/supabase';
-import { NotificationRecord } from '../types';
+import { supabase } from '../lib/supabase';
 
 const router = Router();
 
-// In-memory fallback notification queue
-const mockNotifications: NotificationRecord[] = [
-  {
-    id: 'n1',
-    wallet_address: 'GABC1234567890WXYZ1234567890',
-    circle_id: '1',
-    message: 'Cycle #2 payment of 200 USDC is due in 42 hours.',
-    notification_type: 'contribution_due',
-    is_read: false,
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: 'n2',
-    wallet_address: 'GABC1234567890WXYZ1234567890',
-    circle_id: '1',
-    message: 'Payout of 1,000 USDC for Cycle #1 was successfully processed.',
-    notification_type: 'payout_received',
-    is_read: true,
-    created_at: new Date(Date.now() - 86400000).toISOString(),
-  },
-];
-
-/**
- * GET /api/notifications/:walletAddress
- * Fetch notifications for a user
- */
-router.get('/:walletAddress', async (req: Request, res: Response) => {
+// GET /api/notifications/:wallet - Get notifications for user wallet
+router.get('/:wallet', async (req: Request, res: Response) => {
   try {
-    const { walletAddress } = req.params;
+    const { wallet } = req.params;
 
-    if (isSupabaseConfigured && supabase) {
-      const { data, error } = await supabase
-        .from('notifications')
-        .select('*')
-        .eq('wallet_address', walletAddress)
-        .order('created_at', { ascending: false });
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('wallet_address', wallet)
+      .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      return res.json({ success: true, data: data || [] });
+    if (error) {
+      return res.status(500).json({ error: error.message });
     }
 
-    // Fallback in-memory query
-    const list = mockNotifications.filter((n) => n.wallet_address === walletAddress);
-    return res.json({ success: true, data: list });
+    return res.json({ success: true, notifications: data || [] });
   } catch (err: any) {
-    console.error(`Error fetching notifications for ${req.params.walletAddress}:`, err);
-    return res.status(500).json({ success: false, error: err.message || 'Server error' });
+    return res.status(500).json({ error: err.message || 'Server error' });
   }
 });
 
-/**
- * PATCH /api/notifications/:id/read
- * Mark notification as read
- */
-router.patch('/:id/read', async (req: Request, res: Response) => {
+// POST /api/notifications - Create notification
+router.post('/', async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const { wallet_address, circle_id, message, notification_type } = req.body;
 
-    if (isSupabaseConfigured && supabase) {
-      const { data, error } = await supabase
-        .from('notifications')
-        .update({ is_read: true })
-        .eq('id', id)
-        .select()
-        .single();
-
-      if (error) throw error;
-      return res.json({ success: true, data });
+    if (!wallet_address || !circle_id || !message || !notification_type) {
+      return res.status(400).json({ error: 'Missing required notification fields' });
     }
 
-    // Fallback in-memory
-    const notif = mockNotifications.find((n) => n.id === id);
-    if (notif) {
-      notif.is_read = true;
+    const { data, error } = await supabase
+      .from('notifications')
+      .insert([
+        {
+          wallet_address,
+          circle_id: Number(circle_id),
+          message,
+          notification_type,
+          is_read: false,
+          created_at: new Date().toISOString()
+        }
+      ])
+      .select()
+      .single();
+
+    if (error) {
+      return res.status(500).json({ error: error.message });
     }
-    return res.json({ success: true, data: notif });
+
+    return res.status(201).json({ success: true, notification: data });
   } catch (err: any) {
-    console.error(`Error updating notification #${req.params.id}:`, err);
-    return res.status(500).json({ success: false, error: err.message || 'Server error' });
+    return res.status(500).json({ error: err.message || 'Server error' });
   }
 });
 
-/**
- * POST /api/notifications/remind
- * Trigger off-chain cycle deadline reminders
- */
+// POST /api/notifications/remind - Off-chain reminder trigger
 router.post('/remind', async (req: Request, res: Response) => {
   try {
     const { circleId, cycleIndex } = req.body;
 
-    if (!circleId || cycleIndex === undefined) {
-      return res.status(400).json({ success: false, error: 'circleId and cycleIndex are required' });
+    if (!circleId) {
+      return res.status(400).json({ error: 'circleId is required' });
     }
 
-    if (isSupabaseConfigured && supabase) {
-      // Fetch members of the circle
-      const { data: members } = await supabase
-        .from('circle_members')
-        .select('wallet_address')
-        .eq('circle_id', circleId);
+    // Fetch members of circle to notify
+    const { data: members } = await supabase
+      .from('circle_members')
+      .select('wallet_address')
+      .eq('circle_id', Number(circleId));
 
-      if (members && members.length > 0) {
-        const notificationsToInsert = members.map((m) => ({
-          wallet_address: m.wallet_address,
-          circle_id: circleId,
-          message: `Reminder: Contribution for Cycle #${Number(cycleIndex) + 1} is due soon!`,
-          notification_type: 'contribution_due',
-          is_read: false,
-        }));
+    if (members && members.length > 0) {
+      const newNotifications = members.map((m) => ({
+        wallet_address: m.wallet_address,
+        circle_id: Number(circleId),
+        message: `Reminder: Contribution for Cycle ${cycleIndex !== undefined ? cycleIndex + 1 : 1} is due soon!`,
+        notification_type: 'contribution_due',
+        is_read: false,
+        created_at: new Date().toISOString()
+      }));
 
-        await supabase.from('notifications').insert(notificationsToInsert);
-      }
+      await supabase.from('notifications').insert(newNotifications);
     }
 
     return res.json({
       success: true,
-      message: `Notification reminders queued for Circle #${circleId}, Cycle ${cycleIndex}`,
+      message: `Off-chain notifications queued for Circle #${circleId}, Cycle ${cycleIndex ?? 1}`
     });
   } catch (err: any) {
-    console.error('Error triggering deadline reminders:', err);
-    return res.status(500).json({ success: false, error: err.message || 'Server error' });
+    return res.status(500).json({ error: err.message || 'Server error' });
   }
 });
 
