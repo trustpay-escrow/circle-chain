@@ -24,7 +24,7 @@ jobs:
         run: cd contracts && cargo build --target wasm32-unknown-unknown --release
 
   backend-api:
-    name: Typecheck & Test Backend API (Node / Express)
+    name: Typecheck & Test Backend API (Prisma / Express)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -33,10 +33,20 @@ jobs:
           node-version: 20
 
       - name: Install Dependencies
-        run: cd backend && npm install
+        run: cd backend && npm install --legacy-peer-deps
+
+      - name: Generate Prisma Client
+        run: cd backend && npx prisma generate
+        env:
+          DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/circlechain?schema=public"
 
       - name: Run TypeScript Typecheck
-        run: cd backend && npx tsc --noEmit
+        run: cd backend && npm run typecheck
+
+      - name: Run Vitest Unit Tests
+        run: cd backend && npm test
+        env:
+          DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/circlechain?schema=public"
 
   frontend-web:
     name: Typecheck & Build Next.js Frontend
@@ -48,7 +58,7 @@ jobs:
           node-version: 20
 
       - name: Install Dependencies
-        run: cd frontend && npm install
+        run: cd frontend && npm install --legacy-peer-deps
 
       - name: Run TypeScript Typecheck
         run: cd frontend && npx tsc --noEmit
@@ -56,6 +66,5 @@ jobs:
       - name: Build Next.js Production App
         run: cd frontend && npm run build
         env:
-          NEXT_PUBLIC_SUPABASE_URL: "https://placeholder.supabase.co"
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: "placeholder-key"
           NEXT_PUBLIC_BACKEND_URL: "http://localhost:4000"
+          NEXT_PUBLIC_STELLAR_NETWORK: "TESTNET"

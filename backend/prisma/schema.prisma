@@ -1,0 +1,116 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model CircleMetadata {
+  circle_id           BigInt          @id
+  name                String          @db.VarChar(255)
+  description         String?
+  category            String          @default("General Savings") @db.VarChar(100)
+  creator_address     String          @db.VarChar(64)
+  token_address       String          @default("USDC") @db.VarChar(64)
+  contribution_amount Decimal         @default(100) @db.Decimal(20, 7)
+  interval_days       Int             @default(7)
+  member_count        Int             @default(5)
+  collateral_required Decimal         @default(50) @db.Decimal(20, 7)
+  payout_mode         String          @default("Fixed") @db.VarChar(50)
+  status              String          @default("Forming") @db.VarChar(50)
+  created_at          DateTime        @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime        @default(now()) @updatedAt @db.Timestamptz(6)
+
+  members             CircleMember[]
+  contributions       Contribution[]
+  notifications       Notification[]
+  reputation_logs     ReputationLog[]
+
+  @@index([creator_address], name: "idx_circles_creator")
+  @@index([status], name: "idx_circles_status")
+  @@map("circles_metadata")
+}
+
+model UserProfile {
+  wallet_address         String   @id @db.VarChar(64)
+  username               String?  @unique @db.VarChar(50)
+  display_name           String?  @db.VarChar(100)
+  avatar_url             String?
+  bio                    String?
+  email                  String?  @db.VarChar(255)
+  reputation_score       Int      @default(90)
+  circles_completed      Int      @default(0)
+  punctual_contributions Int      @default(0)
+  total_collateral_staked Decimal @default(0) @db.Decimal(20, 7)
+  created_at             DateTime @default(now()) @db.Timestamptz(6)
+  updated_at             DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  reputation_logs        ReputationLog[]
+
+  @@map("user_profiles")
+}
+
+model CircleMember {
+  id                 String         @id @default(uuid()) @db.Uuid
+  circle_id          BigInt
+  wallet_address     String         @db.VarChar(64)
+  collateral_staked  Decimal        @default(0) @db.Decimal(20, 7)
+  payout_received    Boolean        @default(false)
+  payout_order_index Int?
+  joined_at          DateTime       @default(now()) @db.Timestamptz(6)
+
+  circle             CircleMetadata @relation(fields: [circle_id], references: [circle_id], onDelete: Cascade)
+
+  @@unique([circle_id, wallet_address])
+  @@index([circle_id], name: "idx_circle_members_circle")
+  @@index([wallet_address], name: "idx_circle_members_wallet")
+  @@map("circle_members")
+}
+
+model Contribution {
+  id             String         @id @default(uuid()) @db.Uuid
+  circle_id      BigInt
+  cycle_index    Int
+  member_address String         @db.VarChar(64)
+  amount         Decimal        @db.Decimal(20, 7)
+  status         String         @default("paid") @db.VarChar(50)
+  tx_hash        String?        @db.VarChar(128)
+  paid_at        DateTime       @default(now()) @db.Timestamptz(6)
+
+  circle         CircleMetadata @relation(fields: [circle_id], references: [circle_id], onDelete: Cascade)
+
+  @@index([circle_id, cycle_index], name: "idx_contributions_circle_cycle")
+  @@map("contributions")
+}
+
+model Notification {
+  id                String         @id @default(uuid()) @db.Uuid
+  wallet_address    String         @db.VarChar(64)
+  circle_id         BigInt
+  message           String
+  notification_type String         @db.VarChar(50)
+  is_read           Boolean        @default(false)
+  created_at        DateTime       @default(now()) @db.Timestamptz(6)
+
+  circle            CircleMetadata @relation(fields: [circle_id], references: [circle_id], onDelete: Cascade)
+
+  @@index([wallet_address], name: "idx_notifications_wallet")
+  @@map("notifications")
+}
+
+model ReputationLog {
+  id             String          @id @default(uuid()) @db.Uuid
+  wallet_address String          @db.VarChar(64)
+  circle_id      BigInt?
+  event_type     String          @db.VarChar(50)
+  score_change   Int
+  reason         String?
+  created_at     DateTime        @default(now()) @db.Timestamptz(6)
+
+  profile        UserProfile     @relation(fields: [wallet_address], references: [wallet_address], onDelete: Cascade)
+  circle         CircleMetadata? @relation(fields: [circle_id], references: [circle_id], onDelete: SetNull)
+
+  @@map("reputation_logs")
+}

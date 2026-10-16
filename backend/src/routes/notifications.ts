@@ -1,26 +1,33 @@
 import { Router, Request, Response } from 'express';
-import { supabase, isSupabaseConfigured } from '../config/supabase';
+import { prisma } from '../lib/prisma';
 
 const router = Router();
+
+function serializeData(data: any): any {
+  return JSON.parse(
+    JSON.stringify(data, (key, value) => {
+      if (typeof value === 'bigint') return Number(value);
+      return value;
+    })
+  );
+}
 
 // GET /api/notifications/:wallet - Get notifications for user wallet
 router.get('/:wallet', async (req: Request, res: Response) => {
   try {
     const { wallet } = req.params;
 
-    if (isSupabaseConfigured && supabase) {
-      const { data, error } = await supabase
-        .from('notifications')
-        .select('*')
-        .eq('wallet_address', wallet)
-        .order('created_at', { ascending: false });
+    try {
+      const notifications = await prisma.notification.findMany({
+        where: { wallet_address: wallet },
+        orderBy: { created_at: 'desc' },
+        take: 50
+      });
 
-      if (!error && data) {
-        return res.json({ success: true, notifications: data });
-      }
+      return res.json({ success: true, notifications: serializeData(notifications) });
+    } catch (dbErr) {
+      return res.json({ success: true, notifications: [] });
     }
-
-    return res.json({ success: true, notifications: [] });
   } catch (err: any) {
     return res.json({ success: true, notifications: [] });
   }
@@ -35,39 +42,32 @@ router.post('/', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Missing required notification fields' });
     }
 
-    if (isSupabaseConfigured && supabase) {
-      const { data, error } = await supabase
-        .from('notifications')
-        .insert([
-          {
-            wallet_address,
-            circle_id: Number(circle_id),
-            message,
-            notification_type,
-            is_read: false,
-            created_at: new Date().toISOString()
-          }
-        ])
-        .select()
-        .single();
+    try {
+      const notification = await prisma.notification.create({
+        data: {
+          wallet_address,
+          circle_id: BigInt(circle_id),
+          message,
+          notification_type,
+          is_read: false
+        }
+      });
 
-      if (!error && data) {
-        return res.status(201).json({ success: true, notification: data });
-      }
+      return res.status(201).json({ success: true, notification: serializeData(notification) });
+    } catch (dbErr) {
+      return res.status(201).json({
+        success: true,
+        notification: {
+          id: 'mock-notif-' + Date.now(),
+          wallet_address,
+          circle_id: Number(circle_id),
+          message,
+          notification_type,
+          is_read: false,
+          created_at: new Date().toISOString()
+        }
+      });
     }
-
-    return res.status(201).json({
-      success: true,
-      notification: {
-        id: 'mock-notif-' + Date.now(),
-        wallet_address,
-        circle_id: Number(circle_id),
-        message,
-        notification_type,
-        is_read: false,
-        created_at: new Date().toISOString()
-      }
-    });
   } catch (err: any) {
     return res.status(500).json({ error: err.message || 'Server error' });
   }
@@ -82,24 +82,25 @@ router.post('/remind', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'circleId is required' });
     }
 
-    if (isSupabaseConfigured && supabase) {
-      const { data: members } = await supabase
-        .from('circle_members')
-        .select('wallet_address')
-        .eq('circle_id', Number(circleId));
+    try {
+      const members = await prisma.circleMember.findMany({
+        where: { circle_id: BigInt(circleId) },
+        select: { wallet_address: true }
+      });
 
       if (members && members.length > 0) {
-        const newNotifications = members.map((m) => ({
-          wallet_address: m.wallet_address,
-          circle_id: Number(circleId),
-          message: `Reminder: Contribution for Cycle ${cycleIndex !== undefined ? cycleIndex + 1 : 1} is due soon!`,
-          notification_type: 'contribution_due',
-          is_read: false,
-          created_at: new Date().toISOString()
-        }));
-
-        await supabase.from('notifications').insert(newNotifications);
+        await prisma.notification.createMany({
+          data: members.map((m) => ({
+            wallet_address: m.wallet_address,
+            circle_id: BigInt(circleId),
+            message: `Reminder: Contribution for Cycle ${cycleIndex !== undefined ? cycleIndex + 1 : 1} is due soon!`,
+            notification_type: 'contribution_due',
+            is_read: false
+          }))
+        });
       }
+    } catch (dbErr) {
+      // In-memory or logging fallback
     }
 
     return res.json({

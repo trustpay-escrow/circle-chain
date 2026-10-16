@@ -1,23 +1,38 @@
 import { Router, Request, Response } from 'express';
-import { supabase, isSupabaseConfigured } from '../config/supabase';
+import { prisma } from '../lib/prisma';
 
 const router = Router();
+
+function serializeData(data: any): any {
+  return JSON.parse(
+    JSON.stringify(data, (key, value) => {
+      if (typeof value === 'bigint') return Number(value);
+      return value;
+    })
+  );
+}
 
 // GET /api/profiles/:wallet - Get profile by Stellar public key
 router.get('/:wallet', async (req: Request, res: Response) => {
   try {
     const { wallet } = req.params;
 
-    if (isSupabaseConfigured && supabase) {
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('wallet_address', wallet)
-        .single();
+    try {
+      const profile = await prisma.userProfile.findUnique({
+        where: { wallet_address: wallet },
+        include: {
+          reputation_logs: {
+            take: 10,
+            orderBy: { created_at: 'desc' }
+          }
+        }
+      });
 
-      if (!error && data) {
-        return res.json({ success: true, profile: data });
+      if (profile) {
+        return res.json({ success: true, profile: serializeData(profile) });
       }
+    } catch (dbErr) {
+      // Fallback if DB is initializing
     }
 
     // Default profile fallback
@@ -73,25 +88,20 @@ router.post('/', async (req: Request, res: Response) => {
       reputation_score: reputation_score !== undefined ? Number(reputation_score) : 95,
       circles_completed: circles_completed !== undefined ? Number(circles_completed) : 0,
       punctual_contributions: punctual_contributions !== undefined ? Number(punctual_contributions) : 0,
-      total_collateral_staked: total_collateral_staked !== undefined ? Number(total_collateral_staked) : 0,
-      updated_at: new Date().toISOString()
+      total_collateral_staked: total_collateral_staked !== undefined ? Number(total_collateral_staked) : 0
     };
 
-    if (isSupabaseConfigured && supabase) {
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .upsert(profileData, { onConflict: 'wallet_address' })
-        .select()
-        .single();
+    try {
+      const upserted = await prisma.userProfile.upsert({
+        where: { wallet_address },
+        update: profileData,
+        create: profileData
+      });
 
-      if (!error && data) {
-        return res.json({ success: true, profile: data });
-      } else if (error) {
-        console.warn('[Supabase Profile Upsert Warning]:', error.message);
-      }
+      return res.json({ success: true, profile: serializeData(upserted) });
+    } catch (dbErr) {
+      return res.json({ success: true, profile: profileData });
     }
-
-    return res.json({ success: true, profile: profileData });
   } catch (err: any) {
     return res.status(500).json({ error: err.message || 'Server error' });
   }

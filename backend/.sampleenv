@@ -1,13 +1,17 @@
 # CircleChain Backend Environment Configuration Sample
 
-# Server Port
 PORT=4000
 
-# Supabase Configuration (Off-chain metadata & indexer)
-SUPABASE_URL=https://your-supabase-project.supabase.co
-SUPABASE_ANON_KEY=your-supabase-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
+# PostgreSQL Database Configuration (Prisma ORM)
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/circlechain?schema=public"
+
+# Redis Cache & Queue
+REDIS_URL="redis://localhost:6379"
 
 # Stellar / Soroban Network Configuration
-STELLAR_NETWORK=FUTURENET
-STELLAR_RPC_URL=https://rpc-futurenet.stellar.org
+STELLAR_NETWORK=TESTNET
+STELLAR_RPC_URL=https://soroban-testnet.stellar.org
+STELLAR_HORIZON_URL=https://horizon-testnet.stellar.org
+
+# Deployed Contract Address
+CONTRACT_ID=CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA

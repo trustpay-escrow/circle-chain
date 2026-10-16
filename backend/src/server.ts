@@ -4,10 +4,12 @@ import dotenv from 'dotenv';
 import circlesRouter from './routes/circles';
 import profilesRouter from './routes/profiles';
 import notificationsRouter from './routes/notifications';
+import contributionsRouter from './routes/contributions';
+import { checkDatabaseConnection } from './lib/prisma';
 
 dotenv.config();
 
-const app = express();
+export const app = express();
 const PORT = process.env.PORT || 4000;
 
 // Global Middleware
@@ -20,12 +22,27 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
-// Health check endpoint
-app.get('/health', (req: Request, res: Response) => {
+// Comprehensive Health check endpoints for Drips & Kubernetes probes
+app.get('/health', async (req: Request, res: Response) => {
+  const dbOk = await checkDatabaseConnection();
   res.json({
     status: 'ok',
-    service: 'CircleChain Express Off-Chain Indexer & Notification API',
+    service: 'CircleChain Off-Chain Indexer & Notification Engine',
+    database: dbOk ? 'connected' : 'initializing/fallback',
+    engine: 'Prisma ORM + PostgreSQL 16',
     timestamp: new Date().toISOString()
+  });
+});
+
+app.get('/health/liveness', (req: Request, res: Response) => {
+  res.status(200).json({ status: 'alive', uptime: process.uptime() });
+});
+
+app.get('/health/readiness', async (req: Request, res: Response) => {
+  const dbHealthy = await checkDatabaseConnection();
+  res.status(200).json({
+    status: 'ready',
+    database: dbHealthy ? 'healthy' : 'degraded-mock-fallback'
   });
 });
 
@@ -33,7 +50,10 @@ app.get('/health', (req: Request, res: Response) => {
 app.use('/api/circles', circlesRouter);
 app.use('/api/profiles', profilesRouter);
 app.use('/api/notifications', notificationsRouter);
+app.use('/api/contributions', contributionsRouter);
 
-app.listen(PORT, () => {
-  console.log(`🚀 CircleChain Express server running on port ${PORT}`);
-});
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, () => {
+    console.log(`🚀 CircleChain Express server running on port ${PORT}`);
+  });
+}

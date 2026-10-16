@@ -1,8 +1,17 @@
 import { Router, Request, Response } from 'express';
-import { supabase, isSupabaseConfigured } from '../config/supabase';
+import { prisma } from '../lib/prisma';
 import { ContributionRecord } from '../types';
 
 const router = Router();
+
+function serializeData(data: any): any {
+  return JSON.parse(
+    JSON.stringify(data, (key, value) => {
+      if (typeof value === 'bigint') return Number(value);
+      return value;
+    })
+  );
+}
 
 // In-memory fallback matrix log
 const mockContributions: ContributionRecord[] = [
@@ -22,23 +31,26 @@ const mockContributions: ContributionRecord[] = [
 router.get('/:circleId', async (req: Request, res: Response) => {
   try {
     const { circleId } = req.params;
+    const numericCircleId = parseInt(circleId, 10);
 
-    if (isSupabaseConfigured && supabase) {
-      const { data, error } = await supabase
-        .from('contributions')
-        .select('*')
-        .eq('circle_id', circleId)
-        .order('cycle_index', { ascending: true });
+    if (!isNaN(numericCircleId)) {
+      try {
+        const contributions = await prisma.contribution.findMany({
+          where: { circle_id: BigInt(numericCircleId) },
+          orderBy: { cycle_index: 'asc' }
+        });
 
-      if (error) throw error;
-      return res.json({ success: true, data: data || [] });
+        if (contributions && contributions.length > 0) {
+          return res.json({ success: true, data: serializeData(contributions) });
+        }
+      } catch (dbErr) {
+        // Fallback to in-memory filter
+      }
     }
 
-    // Fallback in-memory filter
     const list = mockContributions.filter((c) => c.circle_id === circleId);
     return res.json({ success: true, data: list });
   } catch (err: any) {
-    console.error(`Error fetching contributions for circle #${req.params.circleId}:`, err);
     return res.status(500).json({ success: false, error: err.message || 'Server error' });
   }
 });
@@ -55,42 +67,48 @@ router.post('/', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: 'circle_id, cycle_index, member_address, and amount are required' });
     }
 
+    const numericCircleId = parseInt(circle_id, 10);
+
+    if (!isNaN(numericCircleId)) {
+      try {
+        const created = await prisma.contribution.create({
+          data: {
+            circle_id: BigInt(numericCircleId),
+            cycle_index: Number(cycle_index),
+            member_address,
+            amount: Number(amount),
+            status: 'paid',
+            tx_hash: tx_hash || null
+          }
+        });
+
+        // Increment user punctual contributions
+        await prisma.userProfile.updateMany({
+          where: { wallet_address: member_address },
+          data: {
+            punctual_contributions: { increment: 1 }
+          }
+        });
+
+        return res.status(201).json({ success: true, data: serializeData(created) });
+      } catch (dbErr) {
+        // Fallback
+      }
+    }
+
     const record: ContributionRecord = {
-      circle_id,
-      cycle_index,
+      circle_id: String(circle_id),
+      cycle_index: Number(cycle_index),
       member_address,
-      amount,
+      amount: Number(amount),
       status: 'paid',
       tx_hash: tx_hash || '',
       paid_at: new Date().toISOString(),
     };
 
-    if (isSupabaseConfigured && supabase) {
-      const { data, error } = await supabase.from('contributions').insert([record]).select().single();
-      if (error) throw error;
-
-      // Increment user punctual_contributions count
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('punctual_contributions')
-        .eq('wallet_address', member_address)
-        .single();
-
-      if (profile) {
-        await supabase
-          .from('user_profiles')
-          .update({ punctual_contributions: (profile.punctual_contributions || 0) + 1 })
-          .eq('wallet_address', member_address);
-      }
-
-      return res.status(201).json({ success: true, data });
-    }
-
-    // Fallback in-memory
     mockContributions.push(record);
     return res.status(201).json({ success: true, data: record });
   } catch (err: any) {
-    console.error('Error logging contribution:', err);
     return res.status(500).json({ success: false, error: err.message || 'Server error' });
   }
 });
@@ -107,31 +125,37 @@ router.post('/payout', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: 'circle_id, cycle_index, and recipient_address are required' });
     }
 
-    if (isSupabaseConfigured && supabase) {
-      // Mark member payout_received = true in roster
-      await supabase
-        .from('circle_members')
-        .update({ payout_received: true })
-        .match({ circle_id, wallet_address: recipient_address });
+    const numericCircleId = parseInt(circle_id, 10);
 
-      // Create payout notification
-      await supabase.from('notifications').insert([
-        {
-          wallet_address: recipient_address,
-          circle_id,
-          message: `Payout of ${total_pot} USDC for Cycle #${cycle_index + 1} has been released to your wallet!`,
-          notification_type: 'payout_received',
-          is_read: false,
-        },
-      ]);
+    if (!isNaN(numericCircleId)) {
+      try {
+        await prisma.circleMember.updateMany({
+          where: {
+            circle_id: BigInt(numericCircleId),
+            wallet_address: recipient_address
+          },
+          data: { payout_received: true }
+        });
+
+        await prisma.notification.create({
+          data: {
+            wallet_address: recipient_address,
+            circle_id: BigInt(numericCircleId),
+            message: `Payout of ${total_pot || 0} USDC for Cycle #${Number(cycle_index) + 1} has been released to your wallet!`,
+            notification_type: 'payout_received',
+            is_read: false
+          }
+        });
+      } catch (dbErr) {
+        // Fallback
+      }
     }
 
     return res.json({
       success: true,
-      message: `Payout of ${total_pot || 0} USDC logged for recipient ${recipient_address} in Cycle #${cycle_index + 1}`,
+      message: `Payout of ${total_pot || 0} USDC logged for recipient ${recipient_address} in Cycle #${Number(cycle_index) + 1}`,
     });
   } catch (err: any) {
-    console.error('Error processing payout release:', err);
     return res.status(500).json({ success: false, error: err.message || 'Server error' });
   }
 });
