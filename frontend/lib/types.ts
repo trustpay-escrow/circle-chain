@@ -14,7 +14,7 @@ export enum PayoutOrderMode {
 export interface CircleData {
   id: string;
   creator: string;
-  name: string; // Off-chain Supabase metadata
+  name: string; // Off-chain Prisma PostgreSQL metadata
   description?: string;
   tokenAddress: string;
   contributionAmount: number; // in USDC

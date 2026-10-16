@@ -6,11 +6,11 @@
     "points": 200,
     "domain": "Domain Engine & Smart Contracts",
     "summary": "Build a background RPC listener service that polls Soroban contract events on Stellar Futurenet and updates cycle contribution states in real time.",
-    "proposedSolution": "Use Stellar SDK RPC Event Subscription APIs to listen for topics matching 'cycle_paid', filter by circle_id, and execute batch inserts into Supabase 'contributions' table.",
+    "proposedSolution": "Use Stellar SDK RPC Event Subscription APIs to listen for topics matching 'cycle_paid', filter by circle_id, and execute batch inserts into Prisma PostgreSQL 'contributions' table.",
     "acceptanceCriteria": [
       "RPC daemon polls Futurenet events without missing topics during network latency",
       "Successfully parses 'cycle_paid' and 'payout_released' events",
-      "Updates contribution matrix in Supabase automatically"
+      "Updates contribution matrix in Prisma PostgreSQL database automatically"
     ],
     "labels": ["contracts", "backend", "complexity:high", "200-pts"]
   },
@@ -40,7 +40,7 @@
     "acceptanceCriteria": [
       "Jobs are scheduled dynamically based on circle interval_days",
       "Failed jobs retry automatically with exponential backoff",
-      "Notifications are recorded in Supabase 'notifications' table"
+      "Notifications are recorded in PostgreSQL 'notifications' table via Prisma"
     ],
     "labels": ["backend", "queue", "complexity:high", "200-pts"]
   },
@@ -81,7 +81,7 @@
     "points": 200,
     "domain": "User Interface / Consumer Surface",
     "summary": "Upgrade the ContributionGrid component to update payment states live via WebSockets when cycle payments occur.",
-    "proposedSolution": "Subscribe to backend Socket.io / Supabase Realtime channel for 'contributions' table changes and trigger animated matrix tile updates.",
+    "proposedSolution": "Subscribe to backend Socket.io / Redis pub/sub channel for 'contributions' table changes and trigger animated matrix tile updates.",
     "acceptanceCriteria": [
       "Matrix grid tiles update without full page refresh",
       "Connection automatically reconnects if socket drops",
@@ -226,12 +226,12 @@
   },
   {
     "id": "ISSUE-16",
-    "title": "feat(backend): implement automated Supabase database migration runner script",
+    "title": "feat(backend): implement automated Prisma database migration runner script",
     "complexity": "High",
     "points": 200,
     "domain": "Developer Experience & Tooling",
     "summary": "Create automated schema migration CLI script for backend deployments.",
-    "proposedSolution": "Build TypeScript migration runner executing SQL scripts in version order against Supabase PostgreSQL database.",
+    "proposedSolution": "Build TypeScript migration runner executing Prisma migrate dev scripts in version order against PostgreSQL database.",
     "acceptanceCriteria": [
       "Tracks applied migrations in schema_migrations table",
       "Rolls back failed migration transactions cleanly",
@@ -276,7 +276,7 @@
     "points": 200,
     "domain": "Developer Experience & Tooling",
     "summary": "Expose operational metrics endpoint for monitoring backend Express server health and RPC latency.",
-    "proposedSolution": "Integrate prom-client library in Express backend exposing `/metrics` endpoint tracking HTTP request rate, error rates, and Supabase query latency.",
+    "proposedSolution": "Integrate prom-client library in Express backend exposing `/metrics` endpoint tracking HTTP request rate, error rates, and PostgreSQL Prisma query latency.",
     "acceptanceCriteria": [
       "Exposes standard Prometheus metrics format",
       "Tracks active WebSocket connection counts",
@@ -451,12 +451,12 @@
   },
   {
     "id": "ISSUE-31",
-    "title": "feat(backend): add Supabase database connection health monitoring endpoint",
+    "title": "feat(backend): add PostgreSQL database connection health monitoring endpoint",
     "complexity": "Medium",
     "points": 150,
     "domain": "Async Workflows & Data Pipelines",
     "summary": "Enhance backend `/health` route to test active database queries and report detailed status.",
-    "proposedSolution": "Update `backend/src/server.ts` health endpoint to execute ping query against Supabase and return execution latency in response.",
+    "proposedSolution": "Update `backend/src/server.ts` health endpoint to execute ping query against PostgreSQL via Prisma and return execution latency in response.",
     "acceptanceCriteria": [
       "Returns HTTP 200 with database latency when connected",
       "Returns HTTP 503 Service Unavailable when database unreachable",

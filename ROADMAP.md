@@ -4,7 +4,7 @@
 - [x] Soroban Rust Smart Contracts for Rotating Savings and Credit Association (ROSCA).
 - [x] Fixed payout, bidding, and randomized turn allocation engines.
 - [x] Collateral staking and automated grace period default slashing mechanics.
-- [x] Supabase off-chain metadata tables (`circles_metadata`, `user_profiles`, `contributions`, `notifications`).
+- [x] Prisma ORM & PostgreSQL 16 off-chain metadata models (`circles_metadata`, `user_profiles`, `contributions`, `notifications`).
 
 ## Phase 2: Frontend & Multi-Wallet Integration (Completed)
 - [x] Next.js App Router frontend with modern glassmorphism styling and micro-animations.

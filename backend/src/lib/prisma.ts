@@ -18,10 +18,13 @@ let isConnected = false;
 
 export async function checkDatabaseConnection(): Promise<boolean> {
   try {
-    await prisma.$queryRaw`SELECT 1`;
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Database connection timeout')), 1000)
+    );
+    await Promise.race([prisma.$queryRaw`SELECT 1`, timeoutPromise]);
     isConnected = true;
     return true;
-  } catch (err: any) {
+  } catch {
     isConnected = false;
     return false;
   }

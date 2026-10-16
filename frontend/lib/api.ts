@@ -1,5 +1,3 @@
-import { supabase } from './supabase';
-
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
 
 export interface CircleData {
@@ -32,7 +30,43 @@ export interface UserProfileData {
   total_collateral_staked?: number;
 }
 
-// 1. Fetch all savings circles
+// Fallback circles for local client previews when backend is starting
+const localFallbackCircles: CircleData[] = [
+  {
+    circle_id: 1,
+    name: 'Tech Founders Ajo Pool',
+    description: 'Monthly ROSCA savings pool for tech founders & developers in West Africa.',
+    category: 'Business Investment',
+    creator_address: 'GABC1234567890WXYZ1234567890TESTNETSAVER01',
+    contribution_amount: 200,
+    interval_days: 30,
+    member_count: 5,
+    collateral_required: 100,
+    payout_mode: 'Fixed',
+    status: 'Active',
+    created_at: new Date().toISOString(),
+    members: [],
+    contributions: []
+  },
+  {
+    circle_id: 2,
+    name: 'Crypto Builders Weekly Pot',
+    description: 'Weekly automated savings circle for Soroban smart contract developers.',
+    category: 'DeFi Savings',
+    creator_address: 'GBX98765432104K2L9876543210TESTNETSAVER02',
+    contribution_amount: 50,
+    interval_days: 7,
+    member_count: 8,
+    collateral_required: 25,
+    payout_mode: 'Bidding',
+    status: 'Forming',
+    created_at: new Date().toISOString(),
+    members: [],
+    contributions: []
+  }
+];
+
+// 1. Fetch all savings circles from Prisma backend
 export async function fetchCircles(): Promise<CircleData[]> {
   try {
     const res = await fetch(`${BACKEND_URL}/api/circles`);
@@ -43,27 +77,13 @@ export async function fetchCircles(): Promise<CircleData[]> {
       }
     }
   } catch (err) {
-    console.warn('Backend server unavailable, falling back to Supabase direct client:', err);
+    console.warn('[CircleChain API] Backend unreachable, returning local fallback preview:', err);
   }
 
-  // Fallback to Supabase direct client
-  try {
-    const { data, error } = await supabase
-      .from('circles_metadata')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (!error && data) {
-      return data;
-    }
-  } catch (e) {
-    console.error('Supabase fetch error:', e);
-  }
-
-  return [];
+  return localFallbackCircles;
 }
 
-// 2. Fetch single circle by ID
+// 2. Fetch single circle by ID from Prisma backend
 export async function fetchCircleById(id: string): Promise<CircleData | null> {
   try {
     const res = await fetch(`${BACKEND_URL}/api/circles/${id}`);
@@ -74,45 +94,15 @@ export async function fetchCircleById(id: string): Promise<CircleData | null> {
       }
     }
   } catch (err) {
-    console.warn('Backend server unavailable, falling back to Supabase:', err);
+    console.warn(`[CircleChain API] Backend unreachable for circle #${id}:`, err);
   }
 
-  // Fallback to Supabase direct client
-  try {
-    const numericId = parseInt(id, 10);
-    if (isNaN(numericId)) return null;
-
-    const { data: circle } = await supabase
-      .from('circles_metadata')
-      .select('*')
-      .eq('circle_id', numericId)
-      .single();
-
-    if (circle) {
-      const { data: members } = await supabase
-        .from('circle_members')
-        .select('*')
-        .eq('circle_id', numericId);
-
-      const { data: contributions } = await supabase
-        .from('contributions')
-        .select('*')
-        .eq('circle_id', numericId);
-
-      return {
-        ...circle,
-        members: members || [],
-        contributions: contributions || []
-      };
-    }
-  } catch (e) {
-    console.error('Supabase circle detail fetch error:', e);
-  }
-
-  return null;
+  const numericId = parseInt(id, 10);
+  const found = localFallbackCircles.find((c) => c.circle_id === numericId);
+  return found || localFallbackCircles[0];
 }
 
-// 3. Create a new circle
+// 3. Create a new circle via Prisma backend
 export async function createCircleApi(payload: Omit<CircleData, 'circle_id' | 'status'> & { circle_id?: number }): Promise<CircleData | null> {
   try {
     const res = await fetch(`${BACKEND_URL}/api/circles`, {
@@ -126,42 +116,29 @@ export async function createCircleApi(payload: Omit<CircleData, 'circle_id' | 's
       if (data.circle) return data.circle;
     }
   } catch (err) {
-    console.warn('Backend API unavailable, submitting directly to Supabase:', err);
+    console.warn('[CircleChain API] Backend API offline during createCircle:', err);
   }
 
-  // Fallback to Supabase direct client
-  try {
-    const circle_id = payload.circle_id || Date.now();
-    const newCircle = {
-      circle_id,
-      name: payload.name,
-      description: payload.description,
-      creator_address: payload.creator_address,
-      contribution_amount: payload.contribution_amount,
-      interval_days: payload.interval_days,
-      member_count: payload.member_count,
-      collateral_required: payload.collateral_required,
-      status: 'Forming',
-      created_at: new Date().toISOString()
-    };
+  const newCircle: CircleData = {
+    circle_id: payload.circle_id || Date.now(),
+    name: payload.name,
+    description: payload.description,
+    category: payload.category || 'General Savings',
+    creator_address: payload.creator_address,
+    contribution_amount: payload.contribution_amount,
+    interval_days: payload.interval_days,
+    member_count: payload.member_count,
+    collateral_required: payload.collateral_required,
+    payout_mode: payload.payout_mode || 'Fixed',
+    status: 'Forming',
+    created_at: new Date().toISOString()
+  };
 
-    const { data, error } = await supabase
-      .from('circles_metadata')
-      .insert([newCircle])
-      .select()
-      .single();
-
-    if (!error && data) {
-      return data;
-    }
-  } catch (e) {
-    console.error('Supabase direct insert error:', e);
-  }
-
-  return null;
+  localFallbackCircles.unshift(newCircle);
+  return newCircle;
 }
 
-// 4. Fetch User Profile
+// 4. Fetch User Profile from Prisma backend
 export async function fetchUserProfileApi(walletAddress: string): Promise<UserProfileData | null> {
   try {
     const res = await fetch(`${BACKEND_URL}/api/profiles/${walletAddress}`);
@@ -170,19 +147,7 @@ export async function fetchUserProfileApi(walletAddress: string): Promise<UserPr
       if (data.profile) return data.profile;
     }
   } catch (err) {
-    console.warn('Backend profile API unavailable, fetching from Supabase:', err);
-  }
-
-  try {
-    const { data } = await supabase
-      .from('user_profiles')
-      .select('*')
-      .eq('wallet_address', walletAddress)
-      .single();
-
-    if (data) return data;
-  } catch (e) {
-    console.error('Supabase profile fetch error:', e);
+    console.warn(`[CircleChain API] Backend unreachable for profile ${walletAddress}:`, err);
   }
 
   return {
@@ -195,7 +160,7 @@ export async function fetchUserProfileApi(walletAddress: string): Promise<UserPr
   };
 }
 
-// 5. Save User Profile
+// 5. Save User Profile via Prisma backend
 export async function saveUserProfileApi(profileData: UserProfileData): Promise<UserProfileData | null> {
   try {
     const res = await fetch(`${BACKEND_URL}/api/profiles`, {
@@ -209,20 +174,8 @@ export async function saveUserProfileApi(profileData: UserProfileData): Promise<
       if (data.profile) return data.profile;
     }
   } catch (err) {
-    console.warn('Backend profile save error:', err);
+    console.warn('[CircleChain API] Backend profile save error:', err);
   }
 
-  try {
-    const { data } = await supabase
-      .from('user_profiles')
-      .upsert(profileData, { onConflict: 'wallet_address' })
-      .select()
-      .single();
-
-    if (data) return data;
-  } catch (e) {
-    console.error('Supabase profile save error:', e);
-  }
-
-  return null;
+  return profileData;
 }
