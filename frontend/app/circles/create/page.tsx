@@ -3,14 +3,16 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createCircleApi } from '../../../lib/api';
-import { Loader2, PlusCircle } from 'lucide-react';
+import { useWallet } from '../../../lib/wallet-context';
+import { Loader2, PlusCircle, Wallet, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../../../components/ui/card';
+import { Card } from '../../../components/ui/card';
 import { Input } from '../../../components/ui/input';
 import { Button } from '../../../components/ui/button';
 
 export default function CreateCirclePage() {
   const router = useRouter();
+  const { address, openModal } = useWallet();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
@@ -19,19 +21,27 @@ export default function CreateCirclePage() {
     intervalDays: 7,
     memberCount: 5,
     collateralRequired: 50,
-    payoutMode: 'Fixed',
-    creatorAddress: 'GABC1234567890WXYZ1234567890'
+    payoutMode: 'Fixed'
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!address) {
+      toast.error('Wallet Required', {
+        description: 'Please connect your Stellar wallet before creating a circle.'
+      });
+      openModal();
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
       const result = await createCircleApi({
         name: formData.name,
         description: formData.description,
-        creator_address: formData.creatorAddress,
+        creator_address: address,
         contribution_amount: formData.contributionAmount,
         interval_days: formData.intervalDays,
         member_count: formData.memberCount,
@@ -41,12 +51,12 @@ export default function CreateCirclePage() {
 
       if (result) {
         toast.success('Circle Created Successfully!', {
-          description: `Circle "${formData.name}" has been initialized and saved to the database.`
+          description: `Circle "${formData.name}" has been created with you as organizer.`
         });
-        router.push('/circles');
+        router.push(`/circles/${result.circle_id}`);
       } else {
         toast.error('Circle Creation Failed', {
-          description: 'Failed to save circle to database. Please check your backend server.'
+          description: 'Failed to save circle to backend. Please check connection.'
         });
       }
     } catch (err: any) {
@@ -64,6 +74,19 @@ export default function CreateCirclePage() {
         <h1 className="text-3xl font-extrabold text-white">Create a New Savings Circle</h1>
         <p className="text-slate-400 text-sm">Configure your rotating savings parameters and deployment settings</p>
       </div>
+
+      {!address && (
+        <Card className="p-4 bg-amber-500/10 border-amber-500/20 text-amber-200 flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <AlertCircle className="w-5 h-5 text-amber-400 shrink-0" />
+            <span className="text-xs">You need to connect a Stellar wallet to become the circle organizer.</span>
+          </div>
+          <Button variant="outline" size="sm" onClick={openModal} className="text-xs shrink-0">
+            <Wallet className="w-3.5 h-3.5 mr-1" />
+            Connect
+          </Button>
+        </Card>
+      )}
 
       <Card className="p-6 space-y-6">
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -89,6 +112,15 @@ export default function CreateCirclePage() {
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 text-sm transition-colors"
               />
             </div>
+
+            {address && (
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">Creator / Organizer Wallet</label>
+                <div className="px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs font-mono text-emerald-400">
+                  {address}
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
@@ -150,12 +182,12 @@ export default function CreateCirclePage() {
             {isSubmitting ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                <span>Saving Circle to Database...</span>
+                <span>Creating Circle...</span>
               </>
             ) : (
               <>
                 <PlusCircle className="w-4 h-4 mr-2" />
-                <span>Initialize Circle & Save to Database</span>
+                <span>Initialize Circle & Deploy</span>
               </>
             )}
           </Button>

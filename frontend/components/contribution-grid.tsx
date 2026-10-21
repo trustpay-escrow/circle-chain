@@ -12,9 +12,12 @@ interface ContributionGridProps {
 
 export function ContributionGrid({ memberCount, currentCycle, members, contributions }: ContributionGridProps) {
   const isPaid = (memberAddress: string, cycleIndex: number) => {
-    return contributions.some(
-      (c) => c.memberAddress.toLowerCase() === memberAddress.toLowerCase() && c.cycleIndex === cycleIndex && c.hasPaid
-    );
+    return contributions.some((c: any) => {
+      const addr = c.member_address || c.memberAddress || '';
+      const cIdx = c.cycle_index !== undefined ? c.cycle_index : c.cycleIndex;
+      const paid = c.status === 'paid' || c.hasPaid === true;
+      return addr.toLowerCase() === memberAddress.toLowerCase() && cIdx === cycleIndex && paid;
+    });
   };
 
   return (

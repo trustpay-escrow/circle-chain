@@ -1,18 +1,19 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Award, ShieldCheck, CheckCircle2, History, Loader2, User, Edit3, Save, X } from 'lucide-react';
+import { Award, ShieldCheck, CheckCircle2, History, Loader2, User, Edit3, Save, X, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import { fetchUserProfileApi, saveUserProfileApi, UserProfileData } from '../../lib/api';
+import { useWallet } from '../../lib/wallet-context';
 import { Badge } from '../../components/ui/badge';
 import { Input } from '../../components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
+import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 
 export default function ProfilePage() {
-  const [walletAddress, setWalletAddress] = useState<string>('GABC1234567890WXYZ1234567890');
+  const { address, openModal } = useWallet();
   const [profile, setProfile] = useState<UserProfileData | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -22,9 +23,14 @@ export default function ProfilePage() {
   const [bioInput, setBioInput] = useState('');
 
   useEffect(() => {
+    if (!address) {
+      setProfile(null);
+      return;
+    }
+
     async function loadProfile() {
       setIsLoading(true);
-      const data = await fetchUserProfileApi(walletAddress);
+      const data = await fetchUserProfileApi(address!);
       setProfile(data);
       if (data) {
         setUsernameInput(data.username || '');
@@ -34,33 +40,55 @@ export default function ProfilePage() {
       setIsLoading(false);
     }
     loadProfile();
-  }, [walletAddress]);
+  }, [address]);
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!address) return;
     setIsSaving(true);
 
     const updatedData: UserProfileData = {
-      ...(profile || { wallet_address: walletAddress }),
-      wallet_address: walletAddress,
+      ...(profile || { wallet_address: address }),
+      wallet_address: address,
       username: usernameInput.replace(/^@/, '').trim(),
-      display_name: displayNameInput.trim() || `Saver (${walletAddress.slice(0, 4)}...${walletAddress.slice(-4)})`,
+      display_name: displayNameInput.trim() || `Saver (${address.slice(0, 4)}...${address.slice(-4)})`,
       bio: bioInput.trim()
     };
 
-    const saved = await saveUserProfileApi(updatedData);
-    if (saved) {
-      setProfile(saved);
-    } else {
-      setProfile(updatedData);
+    try {
+      const saved = await saveUserProfileApi(updatedData);
+      setProfile(saved || updatedData);
+      toast.success('Profile updated successfully!', {
+        description: 'Your @username handle and profile details have been saved.'
+      });
+      setIsEditing(false);
+    } catch (err: any) {
+      toast.error('Failed to update profile', {
+        description: err.message || 'Database error occurred'
+      });
+    } finally {
+      setIsSaving(false);
     }
-
-    setIsSaving(false);
-    setIsEditing(false);
-    toast.success('Profile updated successfully!', {
-      description: 'Your @username handle and profile details have been saved.'
-    });
   };
+
+  if (!address) {
+    return (
+      <div className="max-w-2xl mx-auto py-16 text-center space-y-6">
+        <div className="w-16 h-16 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto">
+          <Wallet className="w-8 h-8" />
+        </div>
+        <div className="space-y-2">
+          <h1 className="text-3xl font-extrabold text-white">Connect Your Stellar Wallet</h1>
+          <p className="text-slate-400 text-sm max-w-md mx-auto">
+            Connect your Freighter, Albedo, or xBull wallet to view your portable Soulbound reputation score, credit history, and manage your @username handle.
+          </p>
+        </div>
+        <Button variant="gradient" size="lg" onClick={openModal}>
+          Connect Wallet to View Profile
+        </Button>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -72,10 +100,10 @@ export default function ProfilePage() {
   }
 
   const user = profile || {
-    wallet_address: walletAddress,
-    username: 'saver_pro',
-    display_name: 'Saver Account',
-    reputation_score: 95,
+    wallet_address: address,
+    username: '',
+    display_name: `Saver (${address.slice(0, 4)}...${address.slice(-4)})`,
+    reputation_score: 100,
     circles_completed: 0,
     punctual_contributions: 0,
     total_collateral_staked: 0
@@ -117,7 +145,7 @@ export default function ProfilePage() {
           <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 px-5 text-center">
             <span className="text-xs text-slate-400 font-medium block">Portable SBT Score</span>
             <span className="text-2xl font-black bg-gradient-to-r from-emerald-400 to-purple-400 bg-clip-text text-transparent">
-              {user.reputation_score ?? 95} / 100
+              {user.reputation_score ?? 100} / 100
             </span>
           </div>
 

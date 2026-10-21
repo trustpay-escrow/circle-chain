@@ -1,27 +1,12 @@
 'use client';
 
-import { useState } from 'react';
 import Link from 'next/link';
-import { connectFreighterWallet } from '../lib/stellar';
+import { useWallet } from '../lib/wallet-context';
 import { Button } from './ui/button';
+import { LogOut, User, PlusCircle, Compass } from 'lucide-react';
 
 export function Navbar() {
-  const [address, setAddress] = useState<string | null>(null);
-  const [connecting, setConnecting] = useState(false);
-
-  const handleConnect = async () => {
-    setConnecting(true);
-    try {
-      const pubKey = await connectFreighterWallet();
-      if (pubKey) {
-        setAddress(pubKey);
-      }
-    } catch (err) {
-      console.error('Wallet connection error:', err);
-    } finally {
-      setConnecting(false);
-    }
-  };
+  const { address, isConnecting, openModal, disconnect } = useWallet();
 
   const truncate = (str: string) => `${str.slice(0, 4)}...${str.slice(-4)}`;
 
@@ -37,30 +22,49 @@ export function Navbar() {
           </span>
         </Link>
 
-        {/* Navigation Links ONLY shown when wallet is connected */}
-        {address ? (
-          <div className="hidden md:flex items-center space-x-6">
-            <Link href="/circles" className="text-slate-300 hover:text-emerald-400 transition-colors text-sm font-medium">
-              Explore Circles
-            </Link>
-            <Link href="/circles/create" className="text-slate-300 hover:text-emerald-400 transition-colors text-sm font-medium">
-              Start Circle
-            </Link>
-            <Link href="/profile" className="text-slate-300 hover:text-emerald-400 transition-colors text-sm font-medium">
-              Reputation & Profile
-            </Link>
-          </div>
-        ) : null}
+        {/* Navigation Links */}
+        <div className="hidden md:flex items-center space-x-6">
+          <Link href="/circles" className="text-slate-300 hover:text-emerald-400 transition-colors text-sm font-medium flex items-center space-x-1.5">
+            <Compass className="w-4 h-4" />
+            <span>Explore Circles</span>
+          </Link>
+          <Link href="/circles/create" className="text-slate-300 hover:text-emerald-400 transition-colors text-sm font-medium flex items-center space-x-1.5">
+            <PlusCircle className="w-4 h-4" />
+            <span>Start Circle</span>
+          </Link>
+          <Link href="/profile" className="text-slate-300 hover:text-emerald-400 transition-colors text-sm font-medium flex items-center space-x-1.5">
+            <User className="w-4 h-4" />
+            <span>Reputation & Profile</span>
+          </Link>
+        </div>
 
-        {/* Connect Wallet Button using shadcn/ui Button */}
-        <Button
-          variant="gradient"
-          size="md"
-          onClick={handleConnect}
-          disabled={connecting}
-        >
-          {connecting ? 'Connecting...' : address ? truncate(address) : 'Connect Wallet'}
-        </Button>
+        {/* Connect / Disconnect Wallet Buttons */}
+        <div className="flex items-center space-x-2">
+          {address ? (
+            <div className="flex items-center space-x-2 bg-slate-900 border border-slate-800 rounded-full px-3 py-1 text-xs">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <Link href="/profile" className="font-mono text-emerald-400 hover:underline">
+                {truncate(address)}
+              </Link>
+              <button
+                onClick={disconnect}
+                title="Disconnect wallet"
+                className="text-slate-500 hover:text-rose-400 p-1 transition-colors"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <Button
+              variant="gradient"
+              size="md"
+              onClick={openModal}
+              disabled={isConnecting}
+            >
+              {isConnecting ? 'Connecting...' : 'Connect Wallet'}
+            </Button>
+          )}
+        </div>
       </div>
     </nav>
   );
