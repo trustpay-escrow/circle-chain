@@ -1,0 +1,11 @@
+# Gitleaks ignore list for CircleChain
+# Ignore specific mock keys, test fixtures, and public sample addresses
+# Format: [commit/rule/fingerprint] or path patterns
+backend/src/test/stellar-validation.test.ts
+backend/src/test/security-blast-radius.test.ts
+backend/src/test/boundary-edge-cases.test.ts
+frontend/test/setup.ts
+scripts/seed-and-verify.ts
+.env.example
+.env.devnet.template
+.env.mainnet.template

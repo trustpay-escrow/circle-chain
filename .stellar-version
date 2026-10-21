@@ -1,0 +1,4 @@
+soroban-cli 20.5.0
+stellar-core 20.5.0
+rustc 1.80.1
+target wasm32-unknown-unknown

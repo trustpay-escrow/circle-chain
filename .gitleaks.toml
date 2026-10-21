@@ -1,0 +1,19 @@
+# Gitleaks Configuration for CircleChain
+title = "CircleChain Gitleaks Rules"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Allowlisted test public keys and non-sensitive fixtures"
+paths = [
+  '''backend/src/test/.*''',
+  '''frontend/test/.*''',
+  '''contracts/src/test\.rs''',
+  '''scripts/seed-and-verify\.ts'''
+]
+regexes = [
+  '''G[A-Z2-7]{55}''', # Stellar Public Keys (non-sensitive)
+  '''CA[A-Z2-7]{54}''', # Soroban Contract Addresses (non-sensitive)
+  '''0x[a-fA-F0-9]{40}''' # Ethereum/Polygon public payout addresses
+]

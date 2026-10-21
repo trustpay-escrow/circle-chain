@@ -7,6 +7,19 @@ on:
     branches: [ main ]
 
 jobs:
+  security-audit:
+    name: Secret & Credential Scanning (Gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run Gitleaks Secret Scanner
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+
   soroban-contracts:
     name: Build & Test Soroban Smart Contracts (Rust)
     runs-on: ubuntu-latest
@@ -43,13 +56,13 @@ jobs:
       - name: Run TypeScript Typecheck
         run: cd backend && npm run typecheck
 
-      - name: Run Vitest Unit Tests
+      - name: Run Vitest Test Suite (Unit, Blast Radius, Invariants)
         run: cd backend && npm test
         env:
           DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/circlechain?schema=public"
 
   frontend-web:
-    name: Typecheck & Build Next.js Frontend
+    name: Typecheck, Test & Build Next.js Frontend
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -60,8 +73,11 @@ jobs:
       - name: Install Dependencies
         run: cd frontend && npm install --legacy-peer-deps
 
+      - name: Run Frontend Vitest Component Tests
+        run: cd frontend && npm test
+
       - name: Run TypeScript Typecheck
-        run: cd frontend && npx tsc --noEmit
+        run: cd frontend && npm run typecheck
 
       - name: Build Next.js Production App
         run: cd frontend && npm run build
