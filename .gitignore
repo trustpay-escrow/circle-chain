@@ -11,6 +11,7 @@ dist/
 # Rust / Soroban build output
 target/
 **/*.wasm
+contracts/Cargo.lock
 
 # Environment variables
 .env

@@ -10,10 +10,13 @@ paths = [
   '''backend/src/test/.*''',
   '''frontend/test/.*''',
   '''contracts/src/test\.rs''',
-  '''scripts/seed-and-verify\.ts'''
+  '''scripts/seed-and-verify\.ts''',
+  '''\.env\.example''',
+  '''docs/.*'''
 ]
 regexes = [
   '''G[A-Z2-7]{55}''', # Stellar Public Keys (non-sensitive)
+  '''S[A-Z2-7]{55}''', # Test Stellar Secret Keys in unit tests
   '''CA[A-Z2-7]{54}''', # Soroban Contract Addresses (non-sensitive)
   '''0x[a-fA-F0-9]{40}''' # Ethereum/Polygon public payout addresses
 ]

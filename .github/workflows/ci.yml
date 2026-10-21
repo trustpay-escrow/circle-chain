@@ -14,18 +14,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Install Gitleaks CLI
+        run: |
+          curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.18.4/gitleaks_8.18.4_linux_x64.tar.gz | sudo tar -xz -C /usr/local/bin gitleaks
       - name: Run Gitleaks Secret Scanner
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_CONFIG: .gitleaks.toml
+        run: gitleaks detect --config=.gitleaks.toml --verbose --redact
 
   soroban-contracts:
     name: Build & Test Soroban Smart Contracts (Rust)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.80.1
           targets: wasm32-unknown-unknown
