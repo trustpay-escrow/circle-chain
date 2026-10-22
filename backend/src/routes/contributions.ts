@@ -13,17 +13,6 @@ function serializeData(data: any): any {
   );
 }
 
-// In-memory fallback matrix log
-const mockContributions: ContributionRecord[] = [
-  // Circle 1, Cycle 0
-  { circle_id: '1', cycle_index: 0, member_address: 'GABC1234567890WXYZ1234567890', amount: 200, status: 'paid', paid_at: new Date().toISOString() },
-  { circle_id: '1', cycle_index: 0, member_address: 'GBX98765432104K2L9876543210', amount: 200, status: 'paid', paid_at: new Date().toISOString() },
-  { circle_id: '1', cycle_index: 0, member_address: 'GDEF4567890123LMNO4567890123', amount: 200, status: 'paid', paid_at: new Date().toISOString() },
-
-  // Circle 1, Cycle 1
-  { circle_id: '1', cycle_index: 1, member_address: 'GABC1234567890WXYZ1234567890', amount: 200, status: 'paid', paid_at: new Date().toISOString() },
-];
-
 /**
  * GET /api/contributions/:circleId
  * Fetch contribution grid matrix for visual proof dashboard
@@ -33,25 +22,19 @@ router.get('/:circleId', async (req: Request, res: Response) => {
     const { circleId } = req.params;
     const numericCircleId = parseInt(circleId, 10);
 
-    if (!isNaN(numericCircleId)) {
-      try {
-        const contributions = await prisma.contribution.findMany({
-          where: { circle_id: BigInt(numericCircleId) },
-          orderBy: { cycle_index: 'asc' }
-        });
-
-        if (contributions && contributions.length > 0) {
-          return res.json({ success: true, data: serializeData(contributions) });
-        }
-      } catch (dbErr) {
-        // Fallback to in-memory filter
-      }
+    if (isNaN(numericCircleId)) {
+      return res.status(400).json({ success: false, error: 'Invalid circle ID parameter' });
     }
 
-    const list = mockContributions.filter((c) => c.circle_id === circleId);
-    return res.json({ success: true, data: list });
+    const contributions = await prisma.contribution.findMany({
+      where: { circle_id: BigInt(numericCircleId) },
+      orderBy: { cycle_index: 'asc' }
+    });
+
+    return res.json({ success: true, data: serializeData(contributions || []) });
   } catch (err: any) {
-    return res.status(500).json({ success: false, error: err.message || 'Server error' });
+    console.error(`[Contributions API] Error fetching contributions for circle #${req.params.circleId}:`, err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to fetch contributions from database' });
   }
 });
 
@@ -68,48 +51,33 @@ router.post('/', async (req: Request, res: Response) => {
     }
 
     const numericCircleId = parseInt(circle_id, 10);
-
-    if (!isNaN(numericCircleId)) {
-      try {
-        const created = await prisma.contribution.create({
-          data: {
-            circle_id: BigInt(numericCircleId),
-            cycle_index: Number(cycle_index),
-            member_address,
-            amount: Number(amount),
-            status: 'paid',
-            tx_hash: tx_hash || null
-          }
-        });
-
-        // Increment user punctual contributions
-        await prisma.userProfile.updateMany({
-          where: { wallet_address: member_address },
-          data: {
-            punctual_contributions: { increment: 1 }
-          }
-        });
-
-        return res.status(201).json({ success: true, data: serializeData(created) });
-      } catch (dbErr) {
-        // Fallback
-      }
+    if (isNaN(numericCircleId)) {
+      return res.status(400).json({ success: false, error: 'Invalid circle_id' });
     }
 
-    const record: ContributionRecord = {
-      circle_id: String(circle_id),
-      cycle_index: Number(cycle_index),
-      member_address,
-      amount: Number(amount),
-      status: 'paid',
-      tx_hash: tx_hash || '',
-      paid_at: new Date().toISOString(),
-    };
+    const created = await prisma.contribution.create({
+      data: {
+        circle_id: BigInt(numericCircleId),
+        cycle_index: Number(cycle_index),
+        member_address,
+        amount: Number(amount),
+        status: 'paid',
+        tx_hash: tx_hash || null
+      }
+    });
 
-    mockContributions.push(record);
-    return res.status(201).json({ success: true, data: record });
+    // Increment user punctual contributions
+    await prisma.userProfile.updateMany({
+      where: { wallet_address: member_address },
+      data: {
+        punctual_contributions: { increment: 1 }
+      }
+    });
+
+    return res.status(201).json({ success: true, data: serializeData(created) });
   } catch (err: any) {
-    return res.status(500).json({ success: false, error: err.message || 'Server error' });
+    console.error('[Contributions API] Error recording contribution:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to record contribution in database' });
   }
 });
 
@@ -126,37 +94,35 @@ router.post('/payout', async (req: Request, res: Response) => {
     }
 
     const numericCircleId = parseInt(circle_id, 10);
-
-    if (!isNaN(numericCircleId)) {
-      try {
-        await prisma.circleMember.updateMany({
-          where: {
-            circle_id: BigInt(numericCircleId),
-            wallet_address: recipient_address
-          },
-          data: { payout_received: true }
-        });
-
-        await prisma.notification.create({
-          data: {
-            wallet_address: recipient_address,
-            circle_id: BigInt(numericCircleId),
-            message: `Payout of ${total_pot || 0} USDC for Cycle #${Number(cycle_index) + 1} has been released to your wallet!`,
-            notification_type: 'payout_received',
-            is_read: false
-          }
-        });
-      } catch (dbErr) {
-        // Fallback
-      }
+    if (isNaN(numericCircleId)) {
+      return res.status(400).json({ success: false, error: 'Invalid circle_id' });
     }
+
+    await prisma.circleMember.updateMany({
+      where: {
+        circle_id: BigInt(numericCircleId),
+        wallet_address: recipient_address
+      },
+      data: { payout_received: true }
+    });
+
+    await prisma.notification.create({
+      data: {
+        wallet_address: recipient_address,
+        circle_id: BigInt(numericCircleId),
+        message: `Payout of ${total_pot || 0} USDC for Cycle #${Number(cycle_index) + 1} has been released to your wallet!`,
+        notification_type: 'payout_received',
+        is_read: false
+      }
+    });
 
     return res.json({
       success: true,
       message: `Payout of ${total_pot || 0} USDC logged for recipient ${recipient_address} in Cycle #${Number(cycle_index) + 1}`,
     });
   } catch (err: any) {
-    return res.status(500).json({ success: false, error: err.message || 'Server error' });
+    console.error('[Contributions API] Error logging pot payout:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to log payout in database' });
   }
 });
 

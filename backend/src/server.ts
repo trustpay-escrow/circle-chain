@@ -28,7 +28,7 @@ app.get('/health', async (req: Request, res: Response) => {
   res.json({
     status: 'ok',
     service: 'CircleChain Off-Chain Indexer & Notification Engine',
-    database: dbOk ? 'connected' : 'initializing/fallback',
+    database: dbOk ? 'connected' : 'disconnected',
     engine: 'Prisma ORM + PostgreSQL 16',
     timestamp: new Date().toISOString()
   });
@@ -42,7 +42,7 @@ app.get('/health/readiness', async (req: Request, res: Response) => {
   const dbHealthy = await checkDatabaseConnection();
   res.status(200).json({
     status: 'ready',
-    database: dbHealthy ? 'healthy' : 'degraded-mock-fallback'
+    database: dbHealthy ? 'healthy' : 'disconnected'
   });
 });
 

@@ -46,6 +46,6 @@ describe('API Health Probes (Liveness & Readiness)', () => {
 
     const data = await res.json();
     expect(data.status).toBe('ready');
-    expect(['healthy', 'degraded-mock-fallback']).toContain(data.database);
+    expect(['healthy', 'disconnected']).toContain(data.database);
   });
 });

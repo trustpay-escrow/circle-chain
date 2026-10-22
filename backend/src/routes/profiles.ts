@@ -17,42 +17,37 @@ router.get('/:wallet', async (req: Request, res: Response) => {
   try {
     const { wallet } = req.params;
 
-    try {
-      const profile = await prisma.userProfile.findUnique({
-        where: { wallet_address: wallet },
-        include: {
-          reputation_logs: {
-            take: 10,
-            orderBy: { created_at: 'desc' }
-          }
-        }
-      });
-
-      if (profile) {
-        return res.json({ success: true, profile: serializeData(profile) });
-      }
-    } catch (dbErr) {
-      // Fallback if DB is initializing
+    if (!wallet) {
+      return res.status(400).json({ success: false, error: 'wallet parameter is required' });
     }
 
-    // Default profile fallback
-    return res.json({
-      success: true,
-      profile: {
-        wallet_address: wallet,
-        username: 'saver_pro',
-        display_name: `Saver (${wallet.slice(0, 4)}...${wallet.slice(-4)})`,
-        avatar_url: null,
-        bio: 'CircleChain ROSCA Participant',
-        email: null,
-        reputation_score: 95,
-        circles_completed: 0,
-        punctual_contributions: 0,
-        total_collateral_staked: 0
+    let profile = await prisma.userProfile.findUnique({
+      where: { wallet_address: wallet },
+      include: {
+        reputation_logs: {
+          take: 10,
+          orderBy: { created_at: 'desc' }
+        }
       }
     });
+
+    if (!profile) {
+      profile = await prisma.userProfile.create({
+        data: {
+          wallet_address: wallet,
+          display_name: `Saver (${wallet.slice(0, 4)}...${wallet.slice(-4)})`,
+          reputation_score: 90
+        },
+        include: {
+          reputation_logs: true
+        }
+      });
+    }
+
+    return res.json({ success: true, profile: serializeData(profile) });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message || 'Server error' });
+    console.error(`[Profiles API] Error fetching profile for wallet ${req.params.wallet}:`, err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to fetch profile from database' });
   }
 });
 
@@ -73,7 +68,7 @@ router.post('/', async (req: Request, res: Response) => {
     } = req.body;
 
     if (!wallet_address) {
-      return res.status(400).json({ error: 'wallet_address is required' });
+      return res.status(400).json({ success: false, error: 'wallet_address is required' });
     }
 
     const cleanUsername = username ? username.replace(/^@/, '').trim() : null;
@@ -85,25 +80,22 @@ router.post('/', async (req: Request, res: Response) => {
       avatar_url: avatar_url || null,
       bio: bio || null,
       email: email || null,
-      reputation_score: reputation_score !== undefined ? Number(reputation_score) : 95,
+      reputation_score: reputation_score !== undefined ? Number(reputation_score) : 90,
       circles_completed: circles_completed !== undefined ? Number(circles_completed) : 0,
       punctual_contributions: punctual_contributions !== undefined ? Number(punctual_contributions) : 0,
       total_collateral_staked: total_collateral_staked !== undefined ? Number(total_collateral_staked) : 0
     };
 
-    try {
-      const upserted = await prisma.userProfile.upsert({
-        where: { wallet_address },
-        update: profileData,
-        create: profileData
-      });
+    const upserted = await prisma.userProfile.upsert({
+      where: { wallet_address },
+      update: profileData,
+      create: profileData
+    });
 
-      return res.json({ success: true, profile: serializeData(upserted) });
-    } catch (dbErr) {
-      return res.json({ success: true, profile: profileData });
-    }
+    return res.json({ success: true, profile: serializeData(upserted) });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message || 'Server error' });
+    console.error('[Profiles API] Error saving profile:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to save profile in database' });
   }
 });
 

@@ -15,65 +15,6 @@ function serializeData(data: any): any {
   );
 }
 
-interface CircleItem {
-  circle_id: number;
-  name: string;
-  description: string;
-  category: string;
-  creator_address: string;
-  token_address: string;
-  contribution_amount: number;
-  interval_days: number;
-  member_count: number;
-  collateral_required: number;
-  payout_mode: string;
-  status: string;
-  created_at: string;
-  updated_at: string;
-  members: any[];
-  contributions: any[];
-}
-
-// Fallback in-memory circles for local testing when DB is initializing
-const mockCircles: CircleItem[] = [
-  {
-    circle_id: 1,
-    name: 'Tech Founders Ajo Pool',
-    description: 'Monthly ROSCA savings pool for tech founders & developers in West Africa.',
-    category: 'Business Investment',
-    creator_address: 'GABC1234567890WXYZ1234567890TESTNETSAVER01',
-    token_address: 'USDC',
-    contribution_amount: 200,
-    interval_days: 30,
-    member_count: 5,
-    collateral_required: 100,
-    payout_mode: 'Fixed',
-    status: 'Active',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    members: [],
-    contributions: []
-  },
-  {
-    circle_id: 2,
-    name: 'Crypto Builders Weekly Pot',
-    description: 'Weekly automated savings circle for Soroban smart contract developers.',
-    category: 'DeFi Savings',
-    creator_address: 'GBX98765432104K2L9876543210TESTNETSAVER02',
-    token_address: 'USDC',
-    contribution_amount: 50,
-    interval_days: 7,
-    member_count: 8,
-    collateral_required: 25,
-    payout_mode: 'Bidding',
-    status: 'Forming',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    members: [],
-    contributions: []
-  }
-];
-
 // GET /api/circles - Fetch all circles
 router.get('/', async (req: Request, res: Response) => {
   try {
@@ -87,14 +28,10 @@ router.get('/', async (req: Request, res: Response) => {
       }
     });
 
-    if (circles && circles.length > 0) {
-      return res.json({ success: true, circles: serializeData(circles) });
-    }
-
-    return res.json({ success: true, circles: mockCircles });
+    return res.json({ success: true, circles: serializeData(circles || []) });
   } catch (err: any) {
-    // Graceful fallback to mock data if database is still starting
-    return res.json({ success: true, circles: mockCircles });
+    console.error('[Circles API] Error fetching circles:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to fetch circles from database' });
   }
 });
 
@@ -105,7 +42,7 @@ router.get('/:id', async (req: Request, res: Response) => {
     const circleId = parseInt(id, 10);
 
     if (isNaN(circleId)) {
-      return res.status(400).json({ error: 'Invalid circle ID parameter' });
+      return res.status(400).json({ success: false, error: 'Invalid circle ID parameter' });
     }
 
     const circle = await prisma.circleMetadata.findUnique({
@@ -118,24 +55,17 @@ router.get('/:id', async (req: Request, res: Response) => {
       }
     });
 
-    if (circle) {
-      return res.json({
-        success: true,
-        circle: serializeData(circle)
-      });
+    if (!circle) {
+      return res.status(404).json({ success: false, error: `Circle #${circleId} not found` });
     }
 
-    const foundMock = mockCircles.find(c => c.circle_id === circleId) || mockCircles[0];
     return res.json({
       success: true,
-      circle: foundMock
+      circle: serializeData(circle)
     });
   } catch (err: any) {
-    const foundMock = mockCircles.find(c => c.circle_id === parseInt(req.params.id, 10)) || mockCircles[0];
-    return res.json({
-      success: true,
-      circle: foundMock
-    });
+    console.error(`[Circles API] Error fetching circle #${req.params.id}:`, err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to fetch circle from database' });
   }
 });
 
@@ -156,46 +86,16 @@ router.post('/', async (req: Request, res: Response) => {
     } = req.body;
 
     if (!name || !creator_address) {
-      return res.status(400).json({ error: 'Name and creator_address are required' });
+      return res.status(400).json({ success: false, error: 'Name and creator_address are required' });
     }
 
     const circle_id = req.body.circle_id ? BigInt(req.body.circle_id) : BigInt(Date.now());
 
-    try {
-      const created = await prisma.circleMetadata.create({
-        data: {
-          circle_id,
-          name,
-          description: description || null,
-          category,
-          creator_address,
-          token_address,
-          contribution_amount: Number(contribution_amount),
-          interval_days: Number(interval_days),
-          member_count: Number(member_count),
-          collateral_required: Number(collateral_required),
-          payout_mode,
-          status: 'Forming',
-          members: {
-            create: {
-              wallet_address: creator_address,
-              collateral_staked: Number(collateral_required),
-              payout_order_index: 0
-            }
-          }
-        },
-        include: {
-          members: true
-        }
-      });
-
-      return res.status(201).json({ success: true, circle: serializeData(created) });
-    } catch (dbErr: any) {
-      // In-memory fallback if database is offline
-      const fallbackCircle: CircleItem = {
-        circle_id: Number(circle_id),
+    const created = await prisma.circleMetadata.create({
+      data: {
+        circle_id,
         name,
-        description: description || '',
+        description: description || null,
         category,
         creator_address,
         token_address,
@@ -205,24 +105,23 @@ router.post('/', async (req: Request, res: Response) => {
         collateral_required: Number(collateral_required),
         payout_mode,
         status: 'Forming',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        members: [
-          {
-            circle_id: Number(circle_id),
+        members: {
+          create: {
             wallet_address: creator_address,
             collateral_staked: Number(collateral_required),
-            joined_at: new Date().toISOString()
+            payout_order_index: 0
           }
-        ],
-        contributions: []
-      };
+        }
+      },
+      include: {
+        members: true
+      }
+    });
 
-      mockCircles.unshift(fallbackCircle);
-      return res.status(201).json({ success: true, circle: fallbackCircle });
-    }
+    return res.status(201).json({ success: true, circle: serializeData(created) });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message || 'Server error' });
+    console.error('[Circles API] Error creating circle:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to create circle in database' });
   }
 });
 
@@ -234,32 +133,25 @@ router.post('/:id/join', async (req: Request, res: Response) => {
     const { wallet_address, collateral_staked = 0 } = req.body;
 
     if (!wallet_address) {
-      return res.status(400).json({ error: 'wallet_address is required' });
+      return res.status(400).json({ success: false, error: 'wallet_address is required' });
     }
 
-    try {
-      const member = await prisma.circleMember.create({
-        data: {
-          circle_id: BigInt(circleId),
-          wallet_address,
-          collateral_staked: Number(collateral_staked)
-        }
-      });
-
-      return res.json({ success: true, member: serializeData(member) });
-    } catch (dbErr: any) {
-      return res.json({
-        success: true,
-        member: {
-          circle_id: circleId,
-          wallet_address,
-          collateral_staked,
-          joined_at: new Date().toISOString()
-        }
-      });
+    if (isNaN(circleId)) {
+      return res.status(400).json({ success: false, error: 'Invalid circle ID parameter' });
     }
+
+    const member = await prisma.circleMember.create({
+      data: {
+        circle_id: BigInt(circleId),
+        wallet_address,
+        collateral_staked: Number(collateral_staked)
+      }
+    });
+
+    return res.json({ success: true, member: serializeData(member) });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message || 'Server error' });
+    console.error(`[Circles API] Error joining circle #${req.params.id}:`, err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to join circle in database' });
   }
 });
 

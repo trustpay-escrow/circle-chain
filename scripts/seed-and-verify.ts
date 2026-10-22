@@ -17,7 +17,7 @@ const FRIENDBOT_URL = 'https://friendbot.stellar.org';
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:4000';
 
 // Simple Base32 encoding helper to generate valid Stellar public key format if SDK isn't present
-function generateMockKeypair() {
+function generateRandomStellarKeypair() {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
   let address = 'G';
   for (let i = 0; i < 55; i++) {
@@ -46,7 +46,7 @@ async function runReviewerVerification() {
     };
   } catch {
     // Fallback keypair generation
-    keypair = generateMockKeypair();
+    keypair = generateRandomStellarKeypair();
   }
 
   console.log(`   Public Key:  ${keypair.publicKey}`);
