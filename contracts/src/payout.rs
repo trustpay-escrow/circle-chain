@@ -1,5 +1,5 @@
 use soroban_sdk::{Env, Address, Vec, token};
-use crate::types::{Circle, CircleStatus, DataKey};
+use crate::types::{Circle, CircleStatus, DataKey, Member};
 
 pub fn contribute(env: &Env, circle_id: u64, member_address: Address, amount: i128) {
     member_address.require_auth();
@@ -72,7 +72,7 @@ pub fn check_and_release_payout(env: &Env, circle_id: u64) {
     client.transfer(&env.current_contract_address(), &recipient, &total_payout);
 
     // Mark recipient as paid out
-    let mut member = env
+    let mut member: Member = env
         .storage()
         .persistent()
         .get(&DataKey::Member(circle_id, recipient.clone()))

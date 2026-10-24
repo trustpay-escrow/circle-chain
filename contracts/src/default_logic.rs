@@ -41,7 +41,7 @@ pub fn handle_default(env: &Env, circle_id: u64, defaulter: Address) {
     }
 
     // Slash collateral
-    let slashed_amount = member.collateral_deposited;
+    let _slashed_amount = member.collateral_deposited;
     member.collateral_deposited = 0;
     member.reputation_score = 0; // Reset reputation score on default
 
