@@ -1,6 +1,25 @@
 {
-  "version": "0.0.1",
-  "project": "circle-chain",
-  "payoutAddress": "0x51E2a2f8c5bB25164B8aBE91c3629f12d2A9D6a1",
-  "network": "polygon"
+  "$schema": "https://raw.githubusercontent.com/drips-network/funding-schema/main/schema.json",
+  "name": "TrustPay Escrow",
+  "description": "Non-custodial milestone escrow and yield-optimizing settlement protocol on Stellar Soroban",
+  "maintainers": [
+    {
+      "name": "Oluwapelumi Elisha",
+      "github": "OluwapelumiElisha",
+      "email": "elishaoluwapelumi38@gmail.com",
+      "stellar": "GDFLMVB4TWEBF3EXD66IYLCZE2G75JWZ5ICPKBWPEW7EE5CCLJQGFHAX",
+      "address": "0xDB6D1cE6044B54Daef29D1AA7Bf846fbB2492e03"
+    }
+  ],
+  "payout": {
+    "network": "stellar",
+    "address": "GDFLMVB4TWEBF3EXD66IYLCZE2G75JWZ5ICPKBWPEW7EE5CCLJQGFHAX",
+    "fallbackEVM": "0xDB6D1cE6044B54Daef29D1AA7Bf846fbB2492e03"
+  },
+  "splits": [
+    {
+      "address": "GDFLMVB4TWEBF3EXD66IYLCZE2G75JWZ5ICPKBWPEW7EE5CCLJQGFHAX",
+      "weight": 100
+    }
+  ]
 }
