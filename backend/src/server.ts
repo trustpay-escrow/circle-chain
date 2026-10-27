@@ -1,59 +1,80 @@
-import express, { Request, Response, NextFunction } from 'express';
-import cors from 'cors';
-import dotenv from 'dotenv';
-import circlesRouter from './routes/circles';
-import profilesRouter from './routes/profiles';
-import notificationsRouter from './routes/notifications';
-import contributionsRouter from './routes/contributions';
-import { checkDatabaseConnection } from './lib/prisma';
+import fastify, { FastifyInstance } from 'fastify';
+import cors from '@fastify/cors';
+import swagger from '@fastify/swagger';
+import swaggerUi from '@fastify/swagger-ui';
+import { logger } from './logger';
+import { config } from './config';
+import { registerRequestIdHook } from './request-id';
+import { registerMetricsHook } from './metrics';
+import { registerErrorHandlers } from './error-handlers';
 
-dotenv.config();
+// Routes
+import { rootRoutes } from './routes/root';
+import { statusRoutes } from './routes/status';
+import { circlesRoutes } from './routes/circles';
+import { profilesRoutes } from './routes/profiles';
+import { contributionsRoutes } from './routes/contributions';
+import { notificationsRoutes } from './routes/notifications';
 
-export const app = express();
-const PORT = process.env.PORT || 4000;
+export interface BuildServerOptions {
+  disableLogger?: boolean;
+}
 
-// Global Middleware
-app.use(cors());
-app.use(express.json());
-
-// Request logger
-app.use((req: Request, res: Response, next: NextFunction) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
-  next();
-});
-
-// Comprehensive Health check endpoints for Drips & Kubernetes probes
-app.get('/health', async (req: Request, res: Response) => {
-  const dbOk = await checkDatabaseConnection();
-  res.json({
-    status: 'ok',
-    service: 'CircleChain Off-Chain Indexer & Notification Engine',
-    database: dbOk ? 'connected' : 'disconnected',
-    engine: 'Prisma ORM + PostgreSQL 16',
-    timestamp: new Date().toISOString()
+/**
+ * App Factory Pattern
+ * Returns a configured Fastify app instance without listening on network ports.
+ * Allows instant, zero-conflict integration testing via app.inject().
+ */
+export async function buildServer(options: BuildServerOptions = {}): Promise<FastifyInstance> {
+  const app = fastify({
+    logger: options.disableLogger ? false : (logger as any)
   });
-});
 
-app.get('/health/liveness', (req: Request, res: Response) => {
-  res.status(200).json({ status: 'alive', uptime: process.uptime() });
-});
+  // 1. Core Hooks & Tracing
+  registerRequestIdHook(app);
+  registerMetricsHook(app);
 
-app.get('/health/readiness', async (req: Request, res: Response) => {
-  const dbHealthy = await checkDatabaseConnection();
-  res.status(200).json({
-    status: 'ready',
-    database: dbHealthy ? 'healthy' : 'disconnected'
+  // 2. Security & Global Plugins
+  await app.register(cors, {
+    origin: config.CORS_ORIGIN === '*' ? true : config.CORS_ORIGIN,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
   });
-});
 
-// Mount Router API Endpoints
-app.use('/api/circles', circlesRouter);
-app.use('/api/profiles', profilesRouter);
-app.use('/api/notifications', notificationsRouter);
-app.use('/api/contributions', contributionsRouter);
-
-if (process.env.NODE_ENV !== 'test') {
-  app.listen(PORT, () => {
-    console.log(`🚀 CircleChain Express server running on port ${PORT}`);
+  // 3. OpenAPI / Swagger Documentation
+  await app.register(swagger, {
+    openapi: {
+      info: {
+        title: 'CircleChain Enterprise API',
+        description: 'Off-Chain Indexer & Notification Engine for Stellar Soroban Savings Circles',
+        version: '0.1.0'
+      },
+      servers: [
+        {
+          url: `http://${config.HOST}:${config.PORT}`,
+          description: 'Local development server'
+        }
+      ]
+    }
   });
+
+  await app.register(swaggerUi, {
+    routePrefix: '/docs',
+    uiConfig: {
+      docExpansion: 'list',
+      deepLinking: false
+    }
+  });
+
+  // 4. Global Error Handlers & Sensitive Redaction
+  registerErrorHandlers(app);
+
+  // 5. Mount Routes
+  await app.register(rootRoutes);
+  await app.register(statusRoutes);
+  await app.register(circlesRoutes, { prefix: '/api/circles' });
+  await app.register(profilesRoutes, { prefix: '/api/profiles' });
+  await app.register(contributionsRoutes, { prefix: '/api/contributions' });
+  await app.register(notificationsRoutes, { prefix: '/api/notifications' });
+
+  return app;
 }
