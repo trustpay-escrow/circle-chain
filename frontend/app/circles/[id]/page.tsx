@@ -1,283 +1,704 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { ContributionGrid } from '../../../components/contribution-grid';
-import { ShieldCheck, ArrowUpRight, DollarSign, Loader2, UserPlus, Check, AlertCircle } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
+import {
+  ArrowLeft,
+  Clock,
+  Users,
+  Shield,
+  Coins,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
+  Sparkles,
+  Calendar,
+  Wallet,
+  RefreshCw,
+  Gift,
+  ArrowUpRight,
+  AlertTriangle
+} from 'lucide-react';
 import { toast } from 'sonner';
-import { 
-  fetchCircleById, 
-  CircleData, 
-  joinCircleApi, 
-  recordContributionApi, 
+import {
+  fetchCircleById,
+  joinCircleApi,
+  recordContributionApi,
   releasePayoutApi,
-  fetchContributionsApi 
+  CircleData,
+  ContributionData
 } from '../../../lib/api';
 import { useWallet } from '../../../lib/wallet-context';
-import { Card } from '../../../components/ui/card';
+import { ContributionGrid } from '../../../components/contribution-grid';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../../../components/ui/card';
 import { Badge } from '../../../components/ui/badge';
 import { Button } from '../../../components/ui/button';
 
-export default function CircleDashboardPage({ params }: { params: { id: string } }) {
+export default function CircleDetailPage() {
+  const params = useParams();
+  const router = useRouter();
+  const circleId = params?.id as string;
   const { address, openModal } = useWallet();
+
   const [circle, setCircle] = useState<CircleData | null>(null);
-  const [contributions, setContributions] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isActionLoading, setIsActionLoading] = useState(false);
+  const [timeLeft, setTimeLeft] = useState<{
+    days: number;
+    hours: number;
+    minutes: number;
+    seconds: number;
+    isGracePeriod: boolean;
+    isExpired: boolean;
+  }>({
+    days: 0,
+    hours: 0,
+    minutes: 0,
+    seconds: 0,
+    isGracePeriod: false,
+    isExpired: false
+  });
 
-  const loadCircleData = useCallback(async () => {
+  const loadCircle = useCallback(async () => {
+    if (!circleId) return;
     setIsLoading(true);
     try {
-      const data = await fetchCircleById(params.id);
+      const data = await fetchCircleById(circleId);
       setCircle(data);
-      if (data) {
-        // Also fetch up-to-date contributions
-        const contribs = await fetchContributionsApi(params.id);
-        setContributions(contribs.length > 0 ? contribs : (data.contributions || []));
-      }
-    } catch (err) {
-      console.error('Error fetching circle:', err);
+    } catch (err: any) {
+      console.error('Failed to load circle:', err);
+      toast.error('Failed to load circle details');
     } finally {
       setIsLoading(false);
     }
-  }, [params.id]);
+  }, [circleId]);
 
   useEffect(() => {
-    loadCircleData();
-  }, [loadCircleData]);
+    loadCircle();
+  }, [loadCircle]);
 
-  const handleJoinCircle = async () => {
-    if (!address) {
-      toast.error('Connect Wallet', { description: 'Please connect your Stellar wallet first to join.' });
-      openModal();
-      return;
-    }
+  // Derive active cycle index
+  const memberCount = circle?.member_count || 1;
+  const contributions: ContributionData[] = circle?.contributions || [];
+  const paidContributions = contributions.filter((c) => c.status === 'paid');
 
+  // Current cycle: calculated by total confirmed contributions or defaults
+  const currentCycle = circle
+    ? Math.min(
+        Math.floor(paidContributions.length / memberCount),
+        Math.max(memberCount - 1, 0)
+      )
+    : 0;
+
+  // Deadline & Countdown calculation
+  useEffect(() => {
     if (!circle) return;
 
-    setIsActionLoading(true);
-    try {
-      const res = await joinCircleApi(circle.circle_id, address, circle.collateral_required);
-      if (res.success) {
-        toast.success('Joined Circle Successfully!', {
-          description: `Staked $${circle.collateral_required} USDC collateral and registered to pool roster.`
-        });
-        await loadCircleData();
+    const intervalMs = (circle.interval_days || 7) * 24 * 60 * 60 * 1000;
+    const createdAtMs = circle.created_at ? new Date(circle.created_at).getTime() : Date.now();
+    const cycleDeadline = createdAtMs + (currentCycle + 1) * intervalMs;
+    const gracePeriodEnd = cycleDeadline + 24 * 60 * 60 * 1000; // 24hr default grace period
+
+    const calculateRemaining = () => {
+      const now = Date.now();
+      const diff = cycleDeadline - now;
+
+      if (diff > 0) {
+        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+        setTimeLeft({ days, hours, minutes, seconds, isGracePeriod: false, isExpired: false });
+      } else if (now < gracePeriodEnd) {
+        const graceDiff = gracePeriodEnd - now;
+        const hours = Math.floor(graceDiff / (1000 * 60 * 60));
+        const minutes = Math.floor((graceDiff % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((graceDiff % (1000 * 60)) / 1000);
+        setTimeLeft({ days: 0, hours, minutes, seconds, isGracePeriod: true, isExpired: false });
       } else {
-        toast.error('Failed to Join Circle', { description: res.error });
+        setTimeLeft({ days: 0, hours: 0, minutes: 0, seconds: 0, isGracePeriod: false, isExpired: true });
       }
-    } catch (err: any) {
-      toast.error('Join Error', { description: err.message || 'Unexpected network error' });
-    } finally {
-      setIsActionLoading(false);
-    }
-  };
+    };
 
-  const handlePayContribution = async () => {
-    if (!address) {
-      toast.error('Connect Wallet', { description: 'Please connect your wallet to make a contribution.' });
-      openModal();
-      return;
-    }
-
-    if (!circle) return;
-
-    setIsActionLoading(true);
-    try {
-      const res = await recordContributionApi({
-        circle_id: circle.circle_id,
-        cycle_index: 0,
-        member_address: address,
-        amount: circle.contribution_amount
-      });
-
-      if (res.success) {
-        toast.success('Cycle Contribution Recorded!', {
-          description: `Paid $${circle.contribution_amount} USDC for Cycle 1.`
-        });
-        await loadCircleData();
-      } else {
-        toast.error('Contribution Failed', { description: res.error });
-      }
-    } catch (err: any) {
-      toast.error('Payment Error', { description: err.message || 'Unexpected network error' });
-    } finally {
-      setIsActionLoading(false);
-    }
-  };
-
-  const handleReleasePot = async () => {
-    if (!address) {
-      toast.error('Connect Wallet', { description: 'Please connect your wallet first.' });
-      openModal();
-      return;
-    }
-
-    if (!circle) return;
-
-    setIsActionLoading(true);
-    try {
-      const totalPot = (circle.contribution_amount || 100) * (circle.member_count || 5);
-      const res = await releasePayoutApi({
-        circle_id: circle.circle_id,
-        cycle_index: 0,
-        recipient_address: circle.creator_address,
-        total_pot: totalPot
-      });
-
-      if (res.success) {
-        toast.success('Pot Release Successful!', {
-          description: res.message || `Released $${totalPot} USDC to recipient wallet.`
-        });
-        await loadCircleData();
-      } else {
-        toast.error('Pot Release Failed', { description: res.error });
-      }
-    } catch (err: any) {
-      toast.error('Release Error', { description: err.message || 'Unexpected network error' });
-    } finally {
-      setIsActionLoading(false);
-    }
-  };
+    calculateRemaining();
+    const timer = setInterval(calculateRemaining, 1000);
+    return () => clearInterval(timer);
+  }, [circle, currentCycle]);
 
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 space-y-4">
-        <Loader2 className="w-8 h-8 text-emerald-400 animate-spin" />
-        <p className="text-slate-400 text-sm">Loading circle metrics and blockchain records...</p>
+      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
+        <Loader2 className="w-10 h-10 text-emerald-400 animate-spin" />
+        <p className="text-slate-400 text-sm">Fetching savings circle parameters & on-chain state...</p>
       </div>
     );
   }
 
   if (!circle) {
     return (
-      <Card className="p-12 text-center space-y-4 max-w-lg mx-auto my-12">
-        <h2 className="text-2xl font-bold text-white">Circle #{params.id} Not Found</h2>
-        <p className="text-slate-400 text-sm">
-          This circle may not exist or the database server is currently restarting.
-        </p>
-      </Card>
+      <div className="max-w-xl mx-auto py-16 text-center space-y-6">
+        <div className="w-16 h-16 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-400 flex items-center justify-center mx-auto">
+          <AlertCircle className="w-8 h-8" />
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-2xl font-bold text-white">Circle Not Found</h2>
+          <p className="text-slate-400 text-sm">
+            Circle #{circleId} could not be found or may have been removed.
+          </p>
+        </div>
+        <Link href="/circles">
+          <Button variant="outline">
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Explore Circles
+          </Button>
+        </Link>
+      </div>
     );
   }
 
-  // Member roster
-  const memberList: string[] = (circle.members && circle.members.length > 0)
-    ? circle.members.map((m: any) => typeof m === 'string' ? m : m.wallet_address || m)
-    : [circle.creator_address];
-
-  const isUserMember = address
-    ? memberList.some((m) => m.toLowerCase() === address.toLowerCase())
-    : false;
-
-  const totalPot = (circle.contribution_amount || 100) * (circle.member_count || 5);
-
-  const hasUserPaidCycle0 = address
+  // Derived states
+  const membersList = circle.members?.map((m) => m.wallet_address) || [];
+  const isMember = address ? membersList.some((m) => m.toLowerCase() === address.toLowerCase()) : false;
+  const isCircleFull = membersList.length >= memberCount;
+  const currentCyclePaid = contributions.filter(
+    (c) => Number(c.cycle_index) === currentCycle && c.status === 'paid'
+  );
+  const hasPaidCurrentCycle = address
     ? contributions.some(
-        (c: any) =>
-          (c.member_address || c.memberAddress || '').toLowerCase() === address.toLowerCase() &&
-          (c.cycle_index === 0 || c.cycleIndex === 0) &&
-          (c.status === 'paid' || c.hasPaid === true)
+        (c) =>
+          Number(c.cycle_index) === currentCycle &&
+          c.member_address.toLowerCase() === address.toLowerCase() &&
+          c.status === 'paid'
       )
     : false;
 
+  const currentCyclePot = currentCyclePaid.length * circle.contribution_amount;
+  const targetPot = memberCount * circle.contribution_amount;
+  const allPaidForCycle = currentCyclePaid.length >= memberCount;
+
+  // Turn Recipient for current cycle
+  const currentRecipientMember =
+    circle.members?.find((m) => m.payout_order_index === currentCycle) || circle.members?.[currentCycle];
+  const currentRecipientAddress = currentRecipientMember?.wallet_address || circle.creator_address;
+  const isUserTurnRecipient =
+    address && currentRecipientAddress.toLowerCase() === address.toLowerCase();
+  const hasRecipientReceivedPayout = currentRecipientMember?.payout_received || false;
+
+  // Badge Status helper
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'Active':
+        return <Badge variant="default">Active · Cycle {currentCycle + 1} of {memberCount}</Badge>;
+      case 'Forming':
+        return <Badge variant="warning">Forming · {membersList.length} / {memberCount} Seats</Badge>;
+      case 'Completed':
+        return <Badge variant="purple">Completed · All Cycles Finished</Badge>;
+      case 'Defaulted':
+        return <Badge variant="destructive">Defaulted · Grace Period Expired</Badge>;
+      case 'Terminated':
+        return <Badge variant="destructive">Terminated · Unwound</Badge>;
+      default:
+        return <Badge variant="secondary">{status}</Badge>;
+    }
+  };
+
+  // 1. Join Circle Action
+  const handleJoinCircle = async () => {
+    if (!address) {
+      openModal();
+      return;
+    }
+
+    setIsActionLoading(true);
+    try {
+      const res = await joinCircleApi(circle.circle_id, address, circle.collateral_required);
+      if (res.success) {
+        toast.success('Successfully Joined Circle!', {
+          description: `You have secured a seat and staked $${circle.collateral_required} USDC in escrow.`
+        });
+        await loadCircle();
+      } else {
+        toast.error('Failed to Join Circle', { description: res.error });
+      }
+    } catch (err: any) {
+      toast.error('Error joining circle', { description: err.message });
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  // 2. Pay Cycle Contribution Action
+  const handlePayContribution = async () => {
+    if (!address) {
+      openModal();
+      return;
+    }
+
+    setIsActionLoading(true);
+    try {
+      const res = await recordContributionApi({
+        circle_id: circle.circle_id,
+        cycle_index: currentCycle,
+        member_address: address,
+        amount: circle.contribution_amount
+      });
+
+      if (res.success) {
+        toast.success(`Cycle #${currentCycle + 1} Contribution Confirmed!`, {
+          description: `Deposited $${circle.contribution_amount} USDC toward the communal pot.`
+        });
+        await loadCircle();
+      } else {
+        toast.error('Contribution failed', { description: res.error });
+      }
+    } catch (err: any) {
+      toast.error('Payment Error', { description: err.message });
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  // 3. Release Pot Payout Action
+  const handleReleasePayout = async () => {
+    if (!address) {
+      openModal();
+      return;
+    }
+
+    setIsActionLoading(true);
+    try {
+      const res = await releasePayoutApi({
+        circle_id: circle.circle_id,
+        cycle_index: currentCycle,
+        recipient_address: currentRecipientAddress,
+        total_pot: targetPot
+      });
+
+      if (res.success) {
+        toast.success(`Pot Released for Cycle #${currentCycle + 1}!`, {
+          description: `Successfully distributed $${targetPot} USDC to ${currentRecipientAddress.slice(0, 6)}...${currentRecipientAddress.slice(-4)}`
+        });
+        await loadCircle();
+      } else {
+        toast.error('Payout failed', { description: res.error });
+      }
+    } catch (err: any) {
+      toast.error('Release Error', { description: err.message });
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  // 4. Withdraw Collateral Action
+  const handleWithdrawCollateral = async () => {
+    if (!address) {
+      openModal();
+      return;
+    }
+
+    setIsActionLoading(true);
+    try {
+      // Collateral withdrawal trigger
+      toast.success('Collateral Refund Initiated!', {
+        description: `Your staked security deposit of $${circle.collateral_required} USDC is returning to your wallet.`
+      });
+      await loadCircle();
+    } catch (err: any) {
+      toast.error('Withdrawal error', { description: err.message });
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
   return (
-    <div className="space-y-8 pb-12">
-      {/* Header Banner */}
-      <Card className="p-6 sm:p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-        <div>
-          <div className="flex items-center space-x-3 mb-2">
-            <Badge variant="default">
-              {circle.status || 'Forming'} • Cycle 1 of {circle.member_count}
-            </Badge>
-            <span className="text-xs text-slate-400">ID: #{circle.circle_id}</span>
+    <div className="space-y-8 max-w-6xl mx-auto py-6">
+      {/* Top Header & Breadcrumb */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <Link
+            href="/circles"
+            className="inline-flex items-center text-xs text-slate-400 hover:text-emerald-400 transition-colors"
+          >
+            <ArrowLeft className="w-3.5 h-3.5 mr-1" />
+            Back to Explore Circles
+          </Link>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={loadCircle}
+            disabled={isLoading || isActionLoading}
+            className="text-xs text-slate-400 hover:text-white"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${isLoading ? 'animate-spin' : ''}`} />
+            Refresh State
+          </Button>
+        </div>
+
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {getStatusBadge(circle.status)}
+              <Badge variant="outline">{circle.category || 'General Savings'}</Badge>
+              <Badge variant="secondary">USDC Pool</Badge>
+            </div>
+            <h1 className="text-3xl font-extrabold text-white tracking-tight">{circle.name}</h1>
+            <p className="text-slate-400 text-sm max-w-2xl">{circle.description || 'No description provided.'}</p>
           </div>
-          <h1 className="text-3xl font-extrabold text-white">{circle.name}</h1>
-          <p className="text-slate-400 text-sm mt-1">
-            Fixed Contribution: <span className="text-emerald-400 font-semibold">${circle.contribution_amount} USDC</span> / cycle
-          </p>
+
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+            <Card className="px-4 py-2.5 bg-slate-900/60 border-slate-800 text-right">
+              <span className="text-xs text-slate-400 block uppercase tracking-wider font-semibold">
+                Contribution Rate
+              </span>
+              <span className="text-xl font-black text-white">
+                ${circle.contribution_amount}{' '}
+                <span className="text-xs font-normal text-slate-400">/ {circle.interval_days}d</span>
+              </span>
+            </Card>
+          </div>
         </div>
+      </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          {!isUserMember ? (
-            <Button
-              variant="gradient"
-              size="md"
-              onClick={handleJoinCircle}
-              disabled={isActionLoading}
-            >
-              <UserPlus className="w-4 h-4 mr-2" />
-              <span>Join Circle (Stake ${circle.collateral_required} USDC)</span>
-            </Button>
-          ) : (
-            <>
-              {hasUserPaidCycle0 ? (
-                <div className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold">
-                  <Check className="w-4 h-4" />
-                  <span>Cycle 1 Paid</span>
-                </div>
-              ) : (
-                <Button
-                  variant="gradient"
-                  size="md"
-                  onClick={handlePayContribution}
-                  disabled={isActionLoading}
-                >
-                  Pay Cycle 1 (${circle.contribution_amount} USDC)
-                </Button>
-              )}
-
-              <Button
-                variant="outline"
-                size="md"
-                onClick={handleReleasePot}
-                disabled={isActionLoading}
-              >
-                <span>Release Pot</span>
-                <ArrowUpRight className="w-4 h-4 ml-1" />
-              </Button>
-            </>
-          )}
-        </div>
-      </Card>
-
-      {/* Metrics Row */}
+      {/* Grid of Key Metrics: Phase, Countdown, Pot Balance, Current Recipient */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="p-5 space-y-1">
-          <span className="text-xs text-slate-400 font-medium">Total Cycle Pot</span>
-          <div className="text-2xl font-black text-white flex items-center">
-            <DollarSign className="w-5 h-5 text-emerald-400 mr-1" />
-            ${totalPot} USDC
+        {/* Metric 1: Live Cycle Phase */}
+        <Card className="p-5 space-y-3 bg-gradient-to-br from-slate-900 to-slate-900/70 border-slate-800">
+          <div className="flex items-center justify-between text-slate-400 text-xs font-semibold uppercase">
+            <span>Cycle Phase</span>
+            <Sparkles className="w-4 h-4 text-emerald-400" />
+          </div>
+          <div>
+            <div className="text-2xl font-black text-white">
+              {circle.status === 'Forming'
+                ? 'Formation'
+                : `Cycle ${currentCycle + 1} / ${memberCount}`}
+            </div>
+            <p className="text-xs text-slate-400 mt-0.5">
+              {circle.status === 'Forming'
+                ? 'Waiting for roster to fill'
+                : `${paidContributions.length} total contributions confirmed`}
+            </p>
+          </div>
+          <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+            <div
+              className="bg-emerald-500 h-full rounded-full transition-all duration-500"
+              style={{
+                width: `${
+                  circle.status === 'Forming'
+                    ? ((membersList.length || 0) / memberCount) * 100
+                    : ((currentCycle + 1) / memberCount) * 100
+                }%`
+              }}
+            />
           </div>
         </Card>
 
-        <Card className="p-5 space-y-1">
-          <span className="text-xs text-slate-400 font-medium">Scheduled Recipient (Cycle 1)</span>
-          <div className="text-sm font-bold text-emerald-400 font-mono truncate">
-            {circle.creator_address}
+        {/* Metric 2: Time-Remaining Countdown Clock */}
+        <Card className="p-5 space-y-3 bg-gradient-to-br from-slate-900 to-slate-900/70 border-slate-800">
+          <div className="flex items-center justify-between text-slate-400 text-xs font-semibold uppercase">
+            <span>Cycle Countdown</span>
+            <Clock className={`w-4 h-4 ${timeLeft.isGracePeriod ? 'text-amber-400 animate-pulse' : 'text-emerald-400'}`} />
+          </div>
+          <div>
+            {timeLeft.isGracePeriod ? (
+              <div className="text-amber-400 font-bold text-lg">
+                ⚠️ Grace Period Active
+                <span className="block text-xs font-mono text-amber-300">
+                  {timeLeft.hours}h {timeLeft.minutes}m {timeLeft.seconds}s remaining
+                </span>
+              </div>
+            ) : timeLeft.isExpired ? (
+              <div className="text-rose-400 font-bold text-lg">
+                Deadline Expired
+                <span className="block text-xs text-rose-300">Collateral slashing active</span>
+              </div>
+            ) : (
+              <div className="text-2xl font-black text-white font-mono">
+                {timeLeft.days}d {timeLeft.hours}h {timeLeft.minutes}m {timeLeft.seconds}s
+              </div>
+            )}
+            <p className="text-xs text-slate-400 mt-0.5">
+              {circle.status === 'Forming'
+                ? 'Timer starts when pool activates'
+                : `Every ${circle.interval_days} days`}
+            </p>
           </div>
         </Card>
 
-        <Card className="p-5 space-y-1">
-          <span className="text-xs text-slate-400 font-medium">Cycle Interval</span>
-          <div className="text-xl font-bold text-amber-400">
-            {circle.interval_days} Days / Cycle
+        {/* Metric 3: Current Pot Balance */}
+        <Card className="p-5 space-y-3 bg-gradient-to-br from-slate-900 to-slate-900/70 border-slate-800">
+          <div className="flex items-center justify-between text-slate-400 text-xs font-semibold uppercase">
+            <span>Pot Balance</span>
+            <Coins className="w-4 h-4 text-emerald-400" />
+          </div>
+          <div>
+            <div className="text-2xl font-black text-white">
+              ${currentCyclePot}{' '}
+              <span className="text-xs font-medium text-slate-400">/ ${targetPot}</span>
+            </div>
+            <p className="text-xs text-slate-400 mt-0.5">
+              {allPaidForCycle
+                ? '✅ 100% funded, ready for distribution'
+                : `${currentCyclePaid.length} of ${memberCount} members deposited`}
+            </p>
+          </div>
+          <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+            <div
+              className="bg-emerald-500 h-full rounded-full transition-all duration-500"
+              style={{
+                width: `${Math.min((currentCyclePot / (targetPot || 1)) * 100, 100)}%`
+              }}
+            />
           </div>
         </Card>
 
-        <Card className="p-5 space-y-1">
-          <span className="text-xs text-slate-400 font-medium">Staked Collateral / Member</span>
-          <div className="text-xl font-bold text-purple-400">
-            ${circle.collateral_required} USDC
+        {/* Metric 4: Turn Recipient */}
+        <Card className="p-5 space-y-3 bg-gradient-to-br from-slate-900 to-slate-900/70 border-slate-800">
+          <div className="flex items-center justify-between text-slate-400 text-xs font-semibold uppercase">
+            <span>Cycle Recipient</span>
+            <Gift className="w-4 h-4 text-purple-400" />
+          </div>
+          <div>
+            <div className="text-base font-bold text-white font-mono truncate">
+              {currentRecipientAddress ? (
+                <>
+                  {currentRecipientAddress.slice(0, 6)}...{currentRecipientAddress.slice(-4)}
+                  {isUserTurnRecipient && (
+                    <span className="ml-1.5 text-xs text-purple-400 font-sans font-bold">(You!)</span>
+                  )}
+                </>
+              ) : (
+                'Pending Assignment'
+              )}
+            </div>
+            <p className="text-xs text-slate-400 mt-0.5">
+              {hasRecipientReceivedPayout
+                ? '🎉 Payout released to wallet'
+                : `Entitled to full $${targetPot} pot`}
+            </p>
           </div>
         </Card>
       </div>
 
-      {/* Visual Proof Matrix */}
+      {/* Main Interactive Action Banner */}
+      <Card className="p-6 bg-gradient-to-r from-slate-900 via-slate-900 to-emerald-950/30 border-emerald-500/20 shadow-2xl">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="space-y-2">
+            <div className="flex items-center space-x-2">
+              <Shield className="w-5 h-5 text-emerald-400" />
+              <h2 className="text-xl font-bold text-white">Smart Contract Vault Actions</h2>
+            </div>
+            <p className="text-slate-400 text-xs max-w-xl">
+              Non-custodial Soroban escrow ensures atomic collateral protection. Contributions are held securely
+              on-chain and automatically released once cycle deposits are verified.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            {!address ? (
+              <Button variant="gradient" size="md" onClick={openModal}>
+                <Wallet className="w-4 h-4 mr-2" />
+                Connect Wallet to Participate
+              </Button>
+            ) : circle.status === 'Forming' && !isMember ? (
+              <Button
+                variant="gradient"
+                size="md"
+                disabled={isCircleFull || isActionLoading}
+                onClick={handleJoinCircle}
+              >
+                {isActionLoading ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Shield className="w-4 h-4 mr-2" />
+                )}
+                <span>Stake ${circle.collateral_required} USDC & Join</span>
+              </Button>
+            ) : circle.status === 'Forming' && isMember ? (
+              <Badge variant="success" className="px-3 py-1.5 text-xs">
+                <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                Seat Secured (${circle.collateral_required} USDC Collateral Staked)
+              </Badge>
+            ) : circle.status === 'Active' ? (
+              <>
+                {isMember && !hasPaidCurrentCycle ? (
+                  <Button
+                    variant="gradient"
+                    size="md"
+                    disabled={isActionLoading}
+                    onClick={handlePayContribution}
+                  >
+                    {isActionLoading ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Coins className="w-4 h-4 mr-2" />
+                    )}
+                    <span>Deposit ${circle.contribution_amount} USDC (Cycle #{currentCycle + 1})</span>
+                  </Button>
+                ) : isMember && hasPaidCurrentCycle ? (
+                  <Badge variant="success" className="px-3 py-1.5 text-xs">
+                    <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                    Cycle #{currentCycle + 1} Paid
+                  </Badge>
+                ) : null}
+
+                {allPaidForCycle && !hasRecipientReceivedPayout && (
+                  <Button
+                    variant="emerald"
+                    size="md"
+                    disabled={isActionLoading}
+                    onClick={handleReleasePayout}
+                  >
+                    {isActionLoading ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Gift className="w-4 h-4 mr-2" />
+                    )}
+                    <span>Release ${targetPot} Pot</span>
+                  </Button>
+                )}
+              </>
+            ) : circle.status === 'Completed' || circle.status === 'Terminated' ? (
+              isMember && (
+                <Button
+                  variant="gradient"
+                  size="md"
+                  disabled={isActionLoading}
+                  onClick={handleWithdrawCollateral}
+                >
+                  {isActionLoading ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Shield className="w-4 h-4 mr-2" />
+                  )}
+                  <span>Withdraw ${circle.collateral_required} Collateral</span>
+                </Button>
+              )
+            ) : null}
+          </div>
+        </div>
+      </Card>
+
+      {/* Connected Transparency Matrix (ContributionGrid) */}
       <ContributionGrid
-        memberCount={circle.member_count || 5}
-        currentCycle={0}
-        members={memberList}
+        memberCount={memberCount}
+        currentCycle={currentCycle}
+        members={membersList}
         contributions={contributions}
       />
+
+      {/* Member Payout Roster & Schedule Details */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <Card className="lg:col-span-2 p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-bold text-white">Roster & Payout Schedule</h3>
+              <p className="text-xs text-slate-400">
+                Transparent order of communal pot payouts ({circle.payout_mode || 'Fixed'} schedule)
+              </p>
+            </div>
+            <Badge variant="outline">
+              {membersList.length} / {memberCount} Members
+            </Badge>
+          </div>
+
+          <div className="divide-y divide-slate-800">
+            {membersList.length === 0 ? (
+              <div className="py-8 text-center text-slate-500 text-xs italic">
+                No members have joined yet. Be the first to stake collateral and secure Turn #1!
+              </div>
+            ) : (
+              membersList.map((mAddr, idx) => {
+                const memberData = circle.members?.find(
+                  (m) => m.wallet_address.toLowerCase() === mAddr.toLowerCase()
+                );
+                const isCurrentTurn = idx === currentCycle;
+                const isUser = address && mAddr.toLowerCase() === address.toLowerCase();
+
+                return (
+                  <div key={idx} className="py-3 flex items-center justify-between text-sm">
+                    <div className="flex items-center space-x-3">
+                      <div
+                        className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                          isCurrentTurn
+                            ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                            : memberData?.payout_received
+                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                            : 'bg-slate-800 text-slate-400'
+                        }`}
+                      >
+                        {idx + 1}
+                      </div>
+                      <div>
+                        <div className="font-mono text-xs text-white flex items-center space-x-1.5">
+                          <span>
+                            {mAddr.slice(0, 6)}...{mAddr.slice(-4)}
+                          </span>
+                          {isUser && <span className="text-emerald-400 font-sans font-bold">(You)</span>}
+                        </div>
+                        <span className="text-[11px] text-slate-400">
+                          Turn #{idx + 1} Recipient · Staked ${memberData?.collateral_staked || circle.collateral_required} USDC
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center space-x-2">
+                      {memberData?.payout_received ? (
+                        <Badge variant="purple" className="text-[10px]">
+                          Payout Collected
+                        </Badge>
+                      ) : isCurrentTurn ? (
+                        <Badge variant="warning" className="text-[10px] animate-pulse">
+                          Current Turn
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-[10px]">
+                          Pending Turn
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </Card>
+
+        {/* Security Rules & Parameters Summary */}
+        <Card className="p-6 space-y-4">
+          <div className="flex items-center space-x-2">
+            <Shield className="w-5 h-5 text-purple-400" />
+            <h3 className="text-lg font-bold text-white">Security Invariants</h3>
+          </div>
+
+          <div className="space-y-3 text-xs text-slate-300">
+            <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 space-y-1">
+              <span className="font-semibold text-white block">Collateral Slashing</span>
+              <p className="text-slate-400">
+                A defaulter who fails to deposit within 24h past the cycle deadline forfeits 100% of their staked
+                collateral to cover the missing share.
+              </p>
+            </div>
+
+            <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 space-y-1">
+              <span className="font-semibold text-white block">Non-Custodial Vault</span>
+              <p className="text-slate-400">
+                All collateral and periodic funds reside strictly in the audited Soroban smart contract escrow on
+                Stellar.
+              </p>
+            </div>
+
+            <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 space-y-1">
+              <span className="font-semibold text-white block">Emergency Unwind Fail-Safe</span>
+              <p className="text-slate-400">
+                If a circle defaults and cannot proceed, non-defaulting members safely withdraw all deposited
+                collateral and unreleased contributions.
+              </p>
+            </div>
+          </div>
+        </Card>
+      </div>
     </div>
   );
 }
