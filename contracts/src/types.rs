@@ -7,7 +7,8 @@ pub enum CircleStatus {
     Forming,   // Created, waiting for member collateral & full capacity
     Active,    // All members joined, cycle contributions underway
     Completed, // All cycles finished and all payouts distributed
-    Defaulted, // A member defaulted post-payout, triggering slashing
+    Defaulted, // A member defaulted and collateral could not cover deficit
+    Terminated, // Circle emergency unwound; members can withdraw remaining collateral & unreleased funds
 }
 
 /// Defines the recipient selection mechanism per cycle

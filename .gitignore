@@ -11,6 +11,8 @@ dist/
 # Rust / Soroban build output
 target/
 **/*.wasm
+test_snapshots/
+contracts/test_snapshots/
 
 # Environment variables
 .env
