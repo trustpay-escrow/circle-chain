@@ -65,6 +65,17 @@ pub fn check_and_release_payout(env: &Env, circle_id: u64) {
 
     let recipient = circle.payout_schedule.get(circle.current_cycle).expect("Invalid recipient schedule");
 
+    // Ensure recipient is eligible
+    let mut member: Member = env
+        .storage()
+        .persistent()
+        .get(&DataKey::Member(circle_id, recipient.clone()))
+        .expect("Member not found");
+
+    if member.reputation_score == 0 && member.collateral_deposited == 0 {
+        panic!("Recipient has defaulted and is disqualified from receiving payout");
+    }
+
     let total_payout = circle.contribution_amount * (circle.member_count as i128);
 
     // Transfer pot to recipient
@@ -72,11 +83,6 @@ pub fn check_and_release_payout(env: &Env, circle_id: u64) {
     client.transfer(&env.current_contract_address(), &recipient, &total_payout);
 
     // Mark recipient as paid out
-    let mut member: Member = env
-        .storage()
-        .persistent()
-        .get(&DataKey::Member(circle_id, recipient.clone()))
-        .expect("Member not found");
     member.has_received_payout = true;
     env.storage().persistent().set(&DataKey::Member(circle_id, recipient), &member);
 

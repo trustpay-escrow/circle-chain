@@ -60,7 +60,12 @@ impl CircleChainContract {
         default_logic::handle_default(&env, circle_id, defaulter);
     }
 
-    /// Withdraw collateral upon completion of all circle cycles
+    /// Emergency unwind of a defaulted or stalled circle, refunding remaining collateral and unreleased contributions
+    pub fn emergency_unwind(env: Env, circle_id: u64) {
+        default_logic::emergency_unwind(&env, circle_id);
+    }
+
+    /// Withdraw collateral upon completion of all circle cycles or after emergency unwind
     pub fn withdraw_collateral(env: Env, circle_id: u64, member_address: Address) {
         default_logic::withdraw_collateral(&env, circle_id, member_address);
     }
