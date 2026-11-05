@@ -67,3 +67,10 @@ pub const DEFAULT_GRACE_PERIOD_SECONDS: u64 = 86_400;
 // TODO: DESIGN DECISION FOR USER
 // 2. Slashing penalty percentage: 100% of collateral is currently slashed to cover missing pot.
 pub const DEFAULT_SLASHING_PERCENTAGE: u32 = 100;
+
+/// Time-To-Live (TTL) rent management constants for persistent and instance storage
+/// Threshold: 100,000 ledgers (when remaining TTL drops below this, extension is triggered)
+/// Extend to: 200,000 ledgers (target ledger TTL to protect against state archival)
+pub const TTL_THRESHOLD: u32 = 100_000;
+pub const TTL_EXTEND_TO: u32 = 200_000;
+

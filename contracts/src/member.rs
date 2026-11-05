@@ -1,23 +1,25 @@
-use soroban_sdk::{Env, Address, Vec, token};
-use crate::types::{Circle, CircleStatus, Member, DataKey};
+use soroban_sdk::{symbol_short, token, Address, Env, Vec};
+use crate::types::{Circle, CircleStatus, DataKey, Member, TTL_EXTEND_TO, TTL_THRESHOLD};
 
 pub fn join_circle(env: &Env, circle_id: u64, member_address: Address) {
     member_address.require_auth();
 
+    let circle_key = DataKey::Circle(circle_id);
     let mut circle: Circle = env
         .storage()
         .persistent()
-        .get(&DataKey::Circle(circle_id))
+        .get(&circle_key)
         .expect("Circle not found");
 
     if circle.status != CircleStatus::Forming {
         panic!("Circle is not accepting new members");
     }
 
+    let members_key = DataKey::CircleMembers(circle_id);
     let mut members: Vec<Address> = env
         .storage()
         .persistent()
-        .get(&DataKey::CircleMembers(circle_id))
+        .get(&members_key)
         .unwrap_or(Vec::new(env));
 
     if members.len() >= circle.member_count {
@@ -39,14 +41,31 @@ pub fn join_circle(env: &Env, circle_id: u64, member_address: Address) {
     };
 
     members.push_back(member_address.clone());
-    env.storage().persistent().set(&DataKey::Member(circle_id, member_address), &new_member);
-    env.storage().persistent().set(&DataKey::CircleMembers(circle_id), &members);
+
+    let member_key = DataKey::Member(circle_id, member_address.clone());
+    env.storage().persistent().set(&member_key, &new_member);
+    env.storage().persistent().extend_ttl(&member_key, TTL_THRESHOLD, TTL_EXTEND_TO);
+
+    env.storage().persistent().set(&members_key, &members);
+    env.storage().persistent().extend_ttl(&members_key, TTL_THRESHOLD, TTL_EXTEND_TO);
 
     // If capacity reached, activate circle
     if members.len() == circle.member_count {
         circle.status = CircleStatus::Active;
         circle.cycle_start_time = env.ledger().timestamp();
+
+        env.events().publish(
+            (symbol_short!("activated"), circle_id),
+            (circle.member_count, circle.cycle_start_time),
+        );
     }
 
-    env.storage().persistent().set(&DataKey::Circle(circle_id), &circle);
+    env.storage().persistent().set(&circle_key, &circle);
+    env.storage().persistent().extend_ttl(&circle_key, TTL_THRESHOLD, TTL_EXTEND_TO);
+
+    // Emit member join event
+    env.events().publish(
+        (symbol_short!("joined"), circle_id),
+        (member_address, circle.collateral_required, members.len()),
+    );
 }

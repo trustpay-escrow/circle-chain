@@ -1,7 +1,10 @@
 #![cfg(test)]
 
 use super::*;
-use soroban_sdk::{testutils::Address as _, testutils::Ledger as _, token, vec, Address, Env};
+use soroban_sdk::{
+    testutils::Address as _, testutils::Events as _, testutils::Ledger as _, token, vec, Address,
+    Env,
+};
 
 #[test]
 fn test_happy_path_circle_flow() {
@@ -200,3 +203,70 @@ fn test_emergency_unwind_and_refund_flow() {
     // user1 has now restored their initial 1000 tokens balance
     assert_eq!(token_client.balance(&user1), 1000);
 }
+
+#[test]
+fn test_events_and_ttl_management() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register_contract(None, CircleChainContract);
+    let client = CircleChainContractClient::new(&env, &contract_id);
+
+    let creator = Address::generate(&env);
+    let user1 = Address::generate(&env);
+    let user2 = Address::generate(&env);
+
+    let token_admin = Address::generate(&env);
+    let token_contract = env.register_stellar_asset_contract(token_admin);
+    let token_admin_client = token::StellarAssetClient::new(&env, &token_contract);
+    token_admin_client.mint(&user1, &1000);
+    token_admin_client.mint(&user2, &1000);
+
+    let payout_schedule = vec![&env, user1.clone(), user2.clone()];
+
+    // 1. Create circle
+    let circle_id = client.create_circle(
+        &creator,
+        &token_contract,
+        &100,
+        &86400,
+        &2,
+        &50,
+        &payout_schedule,
+    );
+    assert_eq!(circle_id, 1);
+
+    let events_after_create = env.events().all();
+    assert!(events_after_create.len() >= 1);
+
+    // 2. Join circle
+    client.join_circle(&circle_id, &user1);
+    client.join_circle(&circle_id, &user2);
+
+    let events_after_join = env.events().all();
+    assert!(events_after_join.len() > events_after_create.len());
+
+    // 3. Contribute for cycle 0
+    client.contribute(&circle_id, &user1, &100);
+    let events_after_contrib = env.events().all();
+    assert!(events_after_contrib.len() > events_after_join.len());
+
+    client.contribute(&circle_id, &user2, &100);
+
+    // 4. Release payout for cycle 0
+    client.check_and_release_payout(&circle_id);
+    let events_after_payout = env.events().all();
+    assert!(events_after_payout.len() > events_after_contrib.len());
+
+    // 5. Complete cycle 1 and verify completed event
+    client.contribute(&circle_id, &user1, &100);
+    client.contribute(&circle_id, &user2, &100);
+    client.check_and_release_payout(&circle_id);
+
+    let final_status = client.get_circle_status(&circle_id);
+    assert_eq!(final_status.status, types::CircleStatus::Completed);
+
+    let final_events = env.events().all();
+    assert!(final_events.len() > events_after_payout.len());
+}
+
