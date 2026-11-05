@@ -8,7 +8,7 @@ import { Button } from './ui/button';
 interface WalletModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelectAddress: (address: string) => void;
+  onSelectAddress: (address: string, providerId?: string) => void;
 }
 
 export function WalletModal({ isOpen, onClose, onSelectAddress }: WalletModalProps) {
@@ -64,7 +64,7 @@ export function WalletModal({ isOpen, onClose, onSelectAddress }: WalletModalPro
     try {
       const pubKey = await provider.connect();
       if (pubKey) {
-        onSelectAddress(pubKey);
+        onSelectAddress(pubKey, provider.id);
         onClose();
       } else {
         setErrorMsg(`Connection to ${provider.name} was cancelled or no public key returned.`);
@@ -84,7 +84,7 @@ export function WalletModal({ isOpen, onClose, onSelectAddress }: WalletModalPro
       setErrorMsg('Invalid Stellar public key format. Address must start with "G" and be 56 characters long.');
       return;
     }
-    onSelectAddress(cleanAddress);
+    onSelectAddress(cleanAddress, selectedMobileWallet || 'manual');
     onClose();
   };
 

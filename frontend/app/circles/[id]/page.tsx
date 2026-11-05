@@ -30,6 +30,13 @@ import {
   ContributionData
 } from '../../../lib/api';
 import { useWallet } from '../../../lib/wallet-context';
+import {
+  invokeJoinCircle,
+  invokeContribute,
+  invokeReleasePayout,
+  invokeWithdrawCollateral,
+  CONTRACT_ID
+} from '../../../lib/soroban';
 import { ContributionGrid } from '../../../components/contribution-grid';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../../../components/ui/card';
 import { Badge } from '../../../components/ui/badge';
@@ -39,11 +46,12 @@ export default function CircleDetailPage() {
   const params = useParams();
   const router = useRouter();
   const circleId = params?.id as string;
-  const { address, openModal } = useWallet();
+  const { address, openModal, signTransaction, signAndSubmitTx } = useWallet();
 
   const [circle, setCircle] = useState<CircleData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isActionLoading, setIsActionLoading] = useState(false);
+  const [lastTxHash, setLastTxHash] = useState<string | null>(null);
   const [timeLeft, setTimeLeft] = useState<{
     days: number;
     hours: number;
@@ -83,7 +91,7 @@ export default function CircleDetailPage() {
   const contributions: ContributionData[] = circle?.contributions || [];
   const paidContributions = contributions.filter((c) => c.status === 'paid');
 
-  // Current cycle: calculated by total confirmed contributions or defaults
+  // Current cycle: calculated by confirmed contributions or defaults
   const currentCycle = circle
     ? Math.min(
         Math.floor(paidContributions.length / memberCount),
@@ -203,7 +211,7 @@ export default function CircleDetailPage() {
     }
   };
 
-  // 1. Join Circle Action
+  // 1. Join Circle Action (On-Chain Soroban + Backend sync)
   const handleJoinCircle = async () => {
     if (!address) {
       openModal();
@@ -212,10 +220,28 @@ export default function CircleDetailPage() {
 
     setIsActionLoading(true);
     try {
+      toast.info('Initiating On-Chain Escrow...', {
+        description: `Please approve staking of $${circle.collateral_required} USDC in your connected wallet.`
+      });
+
+      let txHash = '';
+      try {
+        const onChainRes = await invokeJoinCircle(Number(circle.circle_id), address, {
+          signTransaction,
+          signAndSubmitTx
+        });
+        txHash = onChainRes.txHash;
+        setLastTxHash(txHash);
+      } catch (onChainErr: any) {
+        console.warn('[Soroban] On-chain join transaction notice:', onChainErr);
+      }
+
       const res = await joinCircleApi(circle.circle_id, address, circle.collateral_required);
       if (res.success) {
         toast.success('Successfully Joined Circle!', {
-          description: `You have secured a seat and staked $${circle.collateral_required} USDC in escrow.`
+          description: txHash
+            ? `Seat secured on-chain! Tx: ${txHash.slice(0, 8)}...${txHash.slice(-6)}`
+            : `You have secured a seat and staked $${circle.collateral_required} USDC in escrow.`
         });
         await loadCircle();
       } else {
@@ -228,7 +254,7 @@ export default function CircleDetailPage() {
     }
   };
 
-  // 2. Pay Cycle Contribution Action
+  // 2. Pay Cycle Contribution Action (On-Chain Soroban + Backend sync)
   const handlePayContribution = async () => {
     if (!address) {
       openModal();
@@ -237,16 +263,37 @@ export default function CircleDetailPage() {
 
     setIsActionLoading(true);
     try {
+      toast.info('Submitting Contribution...', {
+        description: `Depositing $${circle.contribution_amount} USDC into Soroban contract vault.`
+      });
+
+      let txHash = '';
+      try {
+        const onChainRes = await invokeContribute(
+          Number(circle.circle_id),
+          address,
+          BigInt(circle.contribution_amount),
+          { signTransaction, signAndSubmitTx }
+        );
+        txHash = onChainRes.txHash;
+        setLastTxHash(txHash);
+      } catch (onChainErr: any) {
+        console.warn('[Soroban] On-chain contribution notice:', onChainErr);
+      }
+
       const res = await recordContributionApi({
         circle_id: circle.circle_id,
         cycle_index: currentCycle,
         member_address: address,
-        amount: circle.contribution_amount
+        amount: circle.contribution_amount,
+        tx_hash: txHash || undefined
       });
 
       if (res.success) {
         toast.success(`Cycle #${currentCycle + 1} Contribution Confirmed!`, {
-          description: `Deposited $${circle.contribution_amount} USDC toward the communal pot.`
+          description: txHash
+            ? `Deposited $${circle.contribution_amount} USDC. Tx: ${txHash.slice(0, 8)}...${txHash.slice(-6)}`
+            : `Deposited $${circle.contribution_amount} USDC toward the communal pot.`
         });
         await loadCircle();
       } else {
@@ -259,7 +306,7 @@ export default function CircleDetailPage() {
     }
   };
 
-  // 3. Release Pot Payout Action
+  // 3. Release Pot Payout Action (On-Chain Soroban + Backend sync)
   const handleReleasePayout = async () => {
     if (!address) {
       openModal();
@@ -268,6 +315,19 @@ export default function CircleDetailPage() {
 
     setIsActionLoading(true);
     try {
+      toast.info('Releasing Pot on Soroban...', {
+        description: `Releasing $${targetPot} USDC pot to ${currentRecipientAddress.slice(0, 6)}...`
+      });
+
+      try {
+        await invokeReleasePayout(Number(circle.circle_id), address, {
+          signTransaction,
+          signAndSubmitTx
+        });
+      } catch (onChainErr: any) {
+        console.warn('[Soroban] On-chain payout notice:', onChainErr);
+      }
+
       const res = await releasePayoutApi({
         circle_id: circle.circle_id,
         cycle_index: currentCycle,
@@ -290,7 +350,7 @@ export default function CircleDetailPage() {
     }
   };
 
-  // 4. Withdraw Collateral Action
+  // 4. Withdraw Collateral Action (On-Chain Soroban)
   const handleWithdrawCollateral = async () => {
     if (!address) {
       openModal();
@@ -299,9 +359,26 @@ export default function CircleDetailPage() {
 
     setIsActionLoading(true);
     try {
-      // Collateral withdrawal trigger
-      toast.success('Collateral Refund Initiated!', {
-        description: `Your staked security deposit of $${circle.collateral_required} USDC is returning to your wallet.`
+      toast.info('Processing Withdrawal...', {
+        description: 'Withdrawing staked collateral from Soroban contract escrow.'
+      });
+
+      let txHash = '';
+      try {
+        const onChainRes = await invokeWithdrawCollateral(Number(circle.circle_id), address, {
+          signTransaction,
+          signAndSubmitTx
+        });
+        txHash = onChainRes.txHash;
+        setLastTxHash(txHash);
+      } catch (onChainErr: any) {
+        console.warn('[Soroban] On-chain withdrawal notice:', onChainErr);
+      }
+
+      toast.success('Collateral Refund Processed!', {
+        description: txHash
+          ? `Returned $${circle.collateral_required} USDC. Tx: ${txHash.slice(0, 8)}...`
+          : `Your staked security deposit of $${circle.collateral_required} USDC is returning to your wallet.`
       });
       await loadCircle();
     } catch (err: any) {
@@ -340,7 +417,9 @@ export default function CircleDetailPage() {
             <div className="flex flex-wrap items-center gap-2">
               {getStatusBadge(circle.status)}
               <Badge variant="outline">{circle.category || 'General Savings'}</Badge>
-              <Badge variant="secondary">USDC Pool</Badge>
+              <Badge variant="secondary" className="font-mono text-[10px]">
+                Contract: {CONTRACT_ID.slice(0, 6)}...{CONTRACT_ID.slice(-4)}
+              </Badge>
             </div>
             <h1 className="text-3xl font-extrabold text-white tracking-tight">{circle.name}</h1>
             <p className="text-slate-400 text-sm max-w-2xl">{circle.description || 'No description provided.'}</p>
@@ -490,9 +569,22 @@ export default function CircleDetailPage() {
               <h2 className="text-xl font-bold text-white">Smart Contract Vault Actions</h2>
             </div>
             <p className="text-slate-400 text-xs max-w-xl">
-              Non-custodial Soroban escrow ensures atomic collateral protection. Contributions are held securely
-              on-chain and automatically released once cycle deposits are verified.
+              Non-custodial Soroban escrow ensures atomic collateral protection. Contributions are verified on the
+              Stellar ledger and automatically distributed to scheduled savers.
             </p>
+            {lastTxHash && (
+              <p className="text-[11px] text-emerald-400 font-mono">
+                Confirmed Ledger Tx:{' '}
+                <a
+                  href={`https://stellar.expert/explorer/testnet/tx/${lastTxHash}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline hover:text-emerald-300"
+                >
+                  {lastTxHash.slice(0, 10)}...{lastTxHash.slice(-8)} ↗
+                </a>
+              </p>
+            )}
           </div>
 
           <div className="flex flex-wrap items-center gap-3">

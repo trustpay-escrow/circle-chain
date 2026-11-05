@@ -1,4 +1,9 @@
-import { isConnected as isFreighterConnected, requestAccess as requestFreighterAccess, getPublicKey as getFreighterPublicKey } from '@stellar/freighter-api';
+import {
+  isConnected as isFreighterConnected,
+  requestAccess as requestFreighterAccess,
+  getPublicKey as getFreighterPublicKey,
+  signTransaction as freighterSignTransaction
+} from '@stellar/freighter-api';
 
 export interface WalletProvider {
   id: string;
@@ -9,6 +14,7 @@ export interface WalletProvider {
   downloadUrl?: string;
   isInstalled: () => boolean | Promise<boolean>;
   connect: () => Promise<string | null>;
+  sign?: (xdr: string, opts?: { networkPassphrase?: string; accountToSign?: string }) => Promise<string>;
 }
 
 // Connect via Albedo web popup (works on all browsers without any extension)
@@ -56,6 +62,74 @@ const connectAlbedo = async (): Promise<string | null> => {
   });
 };
 
+// Sign transaction XDR via Albedo web popup
+export const signAlbedo = async (
+  xdr: string,
+  opts?: { networkPassphrase?: string }
+): Promise<string> => {
+  if (typeof window === 'undefined') throw new Error('Window is undefined');
+
+  return new Promise((resolve, reject) => {
+    const width = 450;
+    const height = 650;
+    const left = window.screenX + (window.outerWidth - width) / 2;
+    const top = window.screenY + (window.outerHeight - height) / 2;
+
+    const network = opts?.networkPassphrase?.includes('Public') ? 'public' : 'testnet';
+    const popup = window.open(
+      `https://albedo.link/intent/tx?xdr=${encodeURIComponent(xdr)}&network=${network}`,
+      'albedo_sign',
+      `width=${width},height=${height},top=${top},left=${left}`
+    );
+
+    if (!popup) {
+      reject(new Error('Pop-up was blocked. Please allow pop-ups for Albedo web wallet.'));
+      return;
+    }
+
+    const handleMessage = (event: MessageEvent) => {
+      if (event.origin === 'https://albedo.link') {
+        window.removeEventListener('message', handleMessage);
+        if (event.data && event.data.signed_envelope_xdr) {
+          resolve(event.data.signed_envelope_xdr);
+        } else if (event.data && event.data.xdr) {
+          resolve(event.data.xdr);
+        } else {
+          reject(new Error(event.data?.message || 'Transaction signing rejected in Albedo'));
+        }
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+
+    const timer = setInterval(() => {
+      if (popup.closed) {
+        clearInterval(timer);
+        window.removeEventListener('message', handleMessage);
+        reject(new Error('Albedo signing window closed by user'));
+      }
+    }, 1000);
+  });
+};
+
+// Sign transaction XDR via xBull extension
+export const signXBull = async (
+  xdr: string,
+  opts?: { accountToSign?: string }
+): Promise<string> => {
+  if (typeof window === 'undefined') throw new Error('Window is undefined');
+  const xbull = (window as any).xBullWallet || (window as any).xBull;
+  if (!xbull) throw new Error('xBull wallet extension is not installed');
+
+  if (typeof xbull.sign === 'function') {
+    return await xbull.sign({ xdr, publicKey: opts?.accountToSign });
+  }
+  if (typeof xbull.signXDR === 'function') {
+    return await xbull.signXDR(xdr);
+  }
+  throw new Error('xBull does not support transaction signing methods');
+};
+
 export const WALLET_PROVIDERS: WalletProvider[] = [
   {
     id: 'freighter',
@@ -84,6 +158,12 @@ export const WALLET_PROVIDERS: WalletProvider[] = [
         console.error('Freighter connect error:', err);
         return null;
       }
+    },
+    sign: async (xdr: string, opts?: { networkPassphrase?: string; accountToSign?: string }) => {
+      return await freighterSignTransaction(xdr, {
+        networkPassphrase: opts?.networkPassphrase,
+        accountToSign: opts?.accountToSign
+      });
     }
   },
   {
@@ -110,7 +190,8 @@ export const WALLET_PROVIDERS: WalletProvider[] = [
         console.error('xBull connect error:', err);
         return null;
       }
-    }
+    },
+    sign: signXBull
   },
   {
     id: 'albedo',
@@ -119,7 +200,8 @@ export const WALLET_PROVIDERS: WalletProvider[] = [
     icon: '⚡',
     description: 'Secure pop-up web wallet — works on any browser without an extension',
     isInstalled: () => true,
-    connect: connectAlbedo
+    connect: connectAlbedo,
+    sign: signAlbedo
   },
   {
     id: 'rabet',
@@ -145,6 +227,12 @@ export const WALLET_PROVIDERS: WalletProvider[] = [
         console.error('Rabet connect error:', err);
         return null;
       }
+    },
+    sign: async (xdr: string) => {
+      const rabet = (window as any).rabet || (window as any).rabetStellar;
+      if (!rabet) throw new Error('Rabet wallet is not installed');
+      const res = await rabet.sign({ xdr });
+      return res?.xdr || res;
     }
   },
   {
@@ -171,6 +259,11 @@ export const WALLET_PROVIDERS: WalletProvider[] = [
         console.error('Hana connect error:', err);
         return null;
       }
+    },
+    sign: async (xdr: string) => {
+      const hana = (window as any).hanaWallet || (window as any).hana;
+      if (!hana?.stellar?.signTransaction) throw new Error('Hana wallet is not installed');
+      return await hana.stellar.signTransaction(xdr);
     }
   },
   {
@@ -202,6 +295,6 @@ export const WALLET_PROVIDERS: WalletProvider[] = [
 
 // Backwards compatibility helper for freighter
 export const connectFreighterWallet = async (): Promise<string | null> => {
-  const freighter = WALLET_PROVIDERS.find(p => p.id === 'freighter');
+  const freighter = WALLET_PROVIDERS.find((p) => p.id === 'freighter');
   return freighter ? freighter.connect() : null;
 };
