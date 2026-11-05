@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createCircleApi } from '../../../lib/api';
 import { useWallet } from '../../../lib/wallet-context';
+import { invokeCreateCircle, CONTRACT_ID } from '../../../lib/soroban';
 import { Loader2, PlusCircle, Wallet, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card } from '../../../components/ui/card';
@@ -12,7 +13,7 @@ import { Button } from '../../../components/ui/button';
 
 export default function CreateCirclePage() {
   const router = useRouter();
-  const { address, openModal } = useWallet();
+  const { address, openModal, signTransaction, signAndSubmitTx } = useWallet();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
@@ -50,6 +51,32 @@ export default function CreateCirclePage() {
       });
 
       if (result) {
+        // Attempt on-chain creation on Soroban VM
+        try {
+          toast.info('Broadcasting to Soroban...', {
+            description: 'Initializing rotating savings pool smart contract on Stellar ledger.'
+          });
+          const onChainRes = await invokeCreateCircle(
+            {
+              creator: address,
+              tokenAddress: CONTRACT_ID,
+              contributionAmount: formData.contributionAmount,
+              intervalDays: formData.intervalDays,
+              memberCount: formData.memberCount,
+              collateralRequired: formData.collateralRequired,
+              payoutSchedule: [address]
+            },
+            { signTransaction, signAndSubmitTx }
+          );
+          if (onChainRes?.txHash) {
+            toast.success('On-Chain Circle Initialized!', {
+              description: `Transaction confirmed on ledger: ${onChainRes.txHash.slice(0, 8)}...${onChainRes.txHash.slice(-6)}`
+            });
+          }
+        } catch (onChainErr: any) {
+          console.warn('[Soroban] On-chain deployment notice:', onChainErr);
+        }
+
         toast.success('Circle Created Successfully!', {
           description: `Circle "${formData.name}" has been created with you as organizer.`
         });

@@ -52,3 +52,4 @@ describe('ContributionGrid Component', () => {
     expect(container.querySelector('span[title="Defaulted"]')).toBeDefined();
   });
 });
+
