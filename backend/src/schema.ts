@@ -215,3 +215,70 @@ export const CreateNotificationSchema: FastifySchema = {
     }
   }
 };
+
+export const GetAuthChallengeSchema: FastifySchema = {
+  description: 'Request a Stellar SEP-10 cryptographic challenge transaction for wallet authentication',
+  tags: ['Authentication'],
+  querystring: {
+    type: 'object',
+    required: ['address'],
+    properties: {
+      address: { type: 'string', minLength: 56, maxLength: 56 }
+    }
+  },
+  response: {
+    200: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean' },
+        transaction: { type: 'string' },
+        network_passphrase: { type: 'string' },
+        server_public_key: { type: 'string' },
+        domain: { type: 'string' },
+        expires_at: { type: 'string' }
+      }
+    },
+    400: ErrorResponseSchema
+  }
+};
+
+export const VerifyAuthChallengeSchema: FastifySchema = {
+  description: 'Verify signed SEP-10 challenge transaction and issue authenticated JWT',
+  tags: ['Authentication'],
+  body: {
+    type: 'object',
+    properties: {
+      transaction: { type: 'string' },
+      xdr: { type: 'string' }
+    }
+  },
+  response: {
+    200: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean' },
+        token: { type: 'string' },
+        address: { type: 'string' },
+        expires_in: { type: 'number' }
+      }
+    },
+    400: ErrorResponseSchema,
+    401: ErrorResponseSchema
+  }
+};
+
+export const GetAuthMeSchema: FastifySchema = {
+  description: 'Retrieve current authenticated wallet address from JWT',
+  tags: ['Authentication'],
+  response: {
+    200: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean' },
+        address: { type: 'string' }
+      }
+    },
+    401: ErrorResponseSchema
+  }
+};
+

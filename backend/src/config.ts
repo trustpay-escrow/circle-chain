@@ -14,6 +14,11 @@ const envSchema = z.object({
   STELLAR_RPC_URL: z.string().url().default('https://soroban-testnet.stellar.org'),
   STELLAR_HORIZON_URL: z.string().url().default('https://horizon-testnet.stellar.org'),
   CORS_ORIGIN: z.string().default('*'),
+  JWT_SECRET: z.string().default('circlechain_stellar_sep10_jwt_secret_change_in_prod'),
+  JWT_EXPIRES_IN: z.string().default('24h'),
+  STELLAR_SERVER_SECRET: z.string().optional(),
+  AUTH_DOMAIN: z.string().default('circlechain.app'),
+  AUTH_CHALLENGE_TIMEOUT: z.coerce.number().default(300),
 });
 
 const parsed = envSchema.safeParse(process.env);
