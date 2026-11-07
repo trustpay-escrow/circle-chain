@@ -6,6 +6,7 @@ export interface CreateContributionDto {
   cycle_index: number;
   member_address: string;
   amount: number;
+  status?: string;
   tx_hash?: string | null;
 }
 
@@ -25,7 +26,7 @@ export class ContributionsRepository {
         cycle_index: Number(data.cycle_index),
         member_address: data.member_address,
         amount: Number(data.amount),
-        status: 'paid',
+        status: data.status || 'paid',
         tx_hash: data.tx_hash || null
       }
     });

@@ -1,6 +1,8 @@
 import { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import { checkDatabaseHealth } from '../db';
 import { getSystemMetrics } from '../metrics';
+import { indexerService } from '../services/indexer.service';
+import { config } from '../config';
 
 export const statusRoutes: FastifyPluginAsync = async (server: FastifyInstance) => {
   // Comprehensive health check
@@ -65,5 +67,16 @@ export const statusRoutes: FastifyPluginAsync = async (server: FastifyInstance) 
   // Metrics endpoint
   server.get('/metrics', async () => {
     return getSystemMetrics();
+  });
+
+  // Soroban RPC Event Indexer probe
+  server.get('/indexer', async () => {
+    return {
+      status: 'active',
+      contractId: config.STELLAR_CONTRACT_ID,
+      lastLedger: indexerService.getLastLedger(),
+      rpcUrl: config.STELLAR_RPC_URL,
+      pollIntervalMs: config.INDEXER_POLL_INTERVAL_MS
+    };
   });
 };
