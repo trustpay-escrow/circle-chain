@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { disconnectDatabase } from './db';
 import { logger } from './logger';
+import { indexerService } from './services/indexer.service';
 
 export function registerShutdownHandlers(server: FastifyInstance): void {
   const gracefulShutdown = async (signal: string) => {
@@ -12,6 +13,9 @@ export function registerShutdownHandlers(server: FastifyInstance): void {
     }, 10000);
 
     try {
+      logger.info('Stopping Soroban event indexer...');
+      indexerService.stop();
+
       logger.info('Closing HTTP server and stopping incoming requests...');
       await server.close();
       logger.info('HTTP server closed.');

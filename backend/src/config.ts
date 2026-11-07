@@ -19,6 +19,11 @@ const envSchema = z.object({
   STELLAR_SERVER_SECRET: z.string().optional(),
   AUTH_DOMAIN: z.string().default('circlechain.app'),
   AUTH_CHALLENGE_TIMEOUT: z.coerce.number().default(300),
+  STELLAR_CONTRACT_ID: z.string().default('CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4'),
+  INDEXER_POLL_INTERVAL_MS: z.coerce.number().default(5000),
+  INDEXER_START_LEDGER: z.coerce.number().optional(),
+  ENABLE_INDEXER: z.coerce.boolean().default(true),
+  REQUIRE_ONCHAIN_TX_VERIFICATION: z.coerce.boolean().default(true),
 });
 
 const parsed = envSchema.safeParse(process.env);

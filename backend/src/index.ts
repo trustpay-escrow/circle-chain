@@ -3,6 +3,7 @@ import { config } from './config';
 import { logger } from './logger';
 import { registerShutdownHandlers } from './shutdown';
 import { checkDatabaseHealth } from './db';
+import { indexerService } from './services/indexer.service';
 
 async function bootstrap() {
   try {
@@ -24,6 +25,11 @@ async function bootstrap() {
       port: config.PORT,
       host: config.HOST
     });
+
+    // Start background Soroban RPC Event Indexer daemon
+    if (config.ENABLE_INDEXER) {
+      indexerService.start();
+    }
 
     logger.info(
       `🚀 CircleChain Fastify Server running at http://${config.HOST}:${config.PORT} (Docs: http://${config.HOST}:${config.PORT}/docs)`
