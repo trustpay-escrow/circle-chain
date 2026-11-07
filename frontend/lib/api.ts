@@ -1,4 +1,84 @@
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+const TOKEN_STORAGE_PREFIX = 'circlechain_jwt_';
+
+export function getAuthToken(walletAddress?: string): string | null {
+  if (typeof window === 'undefined') return null;
+  if (walletAddress) {
+    return localStorage.getItem(`${TOKEN_STORAGE_PREFIX}${walletAddress}`);
+  }
+  const currentWallet = localStorage.getItem('circlechain_connected_wallet');
+  if (currentWallet) {
+    return localStorage.getItem(`${TOKEN_STORAGE_PREFIX}${currentWallet}`);
+  }
+  return null;
+}
+
+export function setAuthToken(walletAddress: string, token: string): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(`${TOKEN_STORAGE_PREFIX}${walletAddress}`, token);
+}
+
+export function clearAuthToken(walletAddress?: string): void {
+  if (typeof window === 'undefined') return;
+  if (walletAddress) {
+    localStorage.removeItem(`${TOKEN_STORAGE_PREFIX}${walletAddress}`);
+  } else {
+    const currentWallet = localStorage.getItem('circlechain_connected_wallet');
+    if (currentWallet) {
+      localStorage.removeItem(`${TOKEN_STORAGE_PREFIX}${currentWallet}`);
+    }
+  }
+}
+
+/**
+ * Requests Stellar SEP-10 challenge, prompts wallet signing, and verifies to obtain JWT
+ */
+export async function authenticateWithSep10(
+  walletAddress: string,
+  signTransaction: (xdr: string) => Promise<string>
+): Promise<string> {
+  const existing = getAuthToken(walletAddress);
+  if (existing) {
+    try {
+      const meRes = await fetch(`${BACKEND_URL}/api/auth/me`, {
+        headers: { Authorization: `Bearer ${existing}` }
+      });
+      if (meRes.ok) return existing;
+    } catch {
+      // expired token
+    }
+    clearAuthToken(walletAddress);
+  }
+
+  // 1. Request challenge
+  const challengeRes = await fetch(
+    `${BACKEND_URL}/api/auth/challenge?address=${encodeURIComponent(walletAddress)}`
+  );
+  if (!challengeRes.ok) {
+    const errData = await challengeRes.json().catch(() => ({}));
+    throw new Error(errData.error || 'Failed to fetch authentication challenge');
+  }
+  const { transaction: challengeXdr } = await challengeRes.json();
+
+  // 2. Sign challenge via connected wallet
+  const signedXdr = await signTransaction(challengeXdr);
+
+  // 3. Verify signature with backend
+  const verifyRes = await fetch(`${BACKEND_URL}/api/auth/verify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ transaction: signedXdr })
+  });
+
+  if (!verifyRes.ok) {
+    const errData = await verifyRes.json().catch(() => ({}));
+    throw new Error(errData.error || 'Signature verification failed');
+  }
+
+  const { token } = await verifyRes.json();
+  setAuthToken(walletAddress, token);
+  return token;
+}
 
 export interface CircleMemberData {
   id?: string;
@@ -96,9 +176,13 @@ export async function createCircleApi(
   payload: Omit<CircleData, 'circle_id' | 'status'> & { circle_id?: number }
 ): Promise<CircleData | null> {
   try {
+    const token = getAuthToken(payload.creator_address);
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
     const res = await fetch(`${BACKEND_URL}/api/circles`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(payload)
     });
 
@@ -124,9 +208,13 @@ export async function joinCircleApi(
   collateralStaked: number
 ): Promise<{ success: boolean; member?: CircleMemberData; error?: string }> {
   try {
+    const token = getAuthToken(walletAddress);
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
     const res = await fetch(`${BACKEND_URL}/api/circles/${circleId}/join`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({
         wallet_address: walletAddress,
         collateral_staked: collateralStaked
@@ -153,9 +241,13 @@ export async function recordContributionApi(payload: {
   tx_hash?: string;
 }): Promise<{ success: boolean; data?: ContributionData; error?: string }> {
   try {
+    const token = getAuthToken(payload.member_address);
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
     const res = await fetch(`${BACKEND_URL}/api/contributions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(payload)
     });
 
@@ -196,9 +288,13 @@ export async function releasePayoutApi(payload: {
   total_pot: number;
 }): Promise<{ success: boolean; message?: string; error?: string }> {
   try {
+    const token = getAuthToken(payload.recipient_address);
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
     const res = await fetch(`${BACKEND_URL}/api/contributions/payout`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(payload)
     });
 
@@ -241,9 +337,13 @@ export async function fetchUserProfileApi(walletAddress: string): Promise<UserPr
 // 9. Save User Profile via Prisma backend
 export async function saveUserProfileApi(profileData: UserProfileData): Promise<UserProfileData | null> {
   try {
+    const token = getAuthToken(profileData.wallet_address);
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
     const res = await fetch(`${BACKEND_URL}/api/profiles`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(profileData)
     });
 

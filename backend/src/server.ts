@@ -11,6 +11,7 @@ import { registerErrorHandlers } from './error-handlers';
 // Routes
 import { rootRoutes } from './routes/root';
 import { statusRoutes } from './routes/status';
+import { authRoutes } from './routes/auth';
 import { circlesRoutes } from './routes/circles';
 import { profilesRoutes } from './routes/profiles';
 import { contributionsRoutes } from './routes/contributions';
@@ -71,6 +72,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
   // 5. Mount Routes
   await app.register(rootRoutes);
   await app.register(statusRoutes);
+  await app.register(authRoutes, { prefix: '/api/auth' });
   await app.register(circlesRoutes, { prefix: '/api/circles' });
   await app.register(profilesRoutes, { prefix: '/api/profiles' });
   await app.register(contributionsRoutes, { prefix: '/api/contributions' });
