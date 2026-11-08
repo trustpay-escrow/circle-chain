@@ -18,12 +18,16 @@ import {
   RefreshCw,
   Gift,
   ArrowUpRight,
-  AlertTriangle
+  AlertTriangle,
+  LogOut,
+  XCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   fetchCircleById,
   joinCircleApi,
+  leaveCircleApi,
+  cancelCircleApi,
   recordContributionApi,
   releasePayoutApi,
   CircleData,
@@ -32,6 +36,8 @@ import {
 import { useWallet } from '../../../lib/wallet-context';
 import {
   invokeJoinCircle,
+  invokeLeaveCircle,
+  invokeCancelCircle,
   invokeContribute,
   invokeReleasePayout,
   invokeWithdrawCollateral,
@@ -168,6 +174,12 @@ export default function CircleDetailPage() {
   // Derived states
   const membersList = circle.members?.map((m) => m.wallet_address) || [];
   const isMember = address ? membersList.some((m) => m.toLowerCase() === address.toLowerCase()) : false;
+  const isCreator = Boolean(
+    address && circle.creator_address && address.toLowerCase() === circle.creator_address.toLowerCase()
+  );
+  const createdAtMs = circle.created_at ? new Date(circle.created_at).getTime() : 0;
+  const isFormingExpired =
+    circle.status === 'Forming' && createdAtMs > 0 && Date.now() - createdAtMs > 7 * 86400 * 1000;
   const isCircleFull = membersList.length >= memberCount;
   const currentCyclePaid = contributions.filter(
     (c) => Number(c.cycle_index) === currentCycle && c.status === 'paid'
@@ -206,6 +218,8 @@ export default function CircleDetailPage() {
         return <Badge variant="destructive">Defaulted · Grace Period Expired</Badge>;
       case 'Terminated':
         return <Badge variant="destructive">Terminated · Unwound</Badge>;
+      case 'Cancelled':
+        return <Badge variant="destructive">Cancelled · Fully Refunded</Badge>;
       default:
         return <Badge variant="secondary">{status}</Badge>;
     }
@@ -383,6 +397,92 @@ export default function CircleDetailPage() {
       await loadCircle();
     } catch (err: any) {
       toast.error('Withdrawal error', { description: err.message });
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  // 5. Leave Circle Action (Forming state - On-Chain Soroban + Backend sync)
+  const handleLeaveCircle = async () => {
+    if (!address) {
+      openModal();
+      return;
+    }
+
+    setIsActionLoading(true);
+    try {
+      toast.info('Leaving Circle...', {
+        description: `Withdrawing staked collateral of $${circle.collateral_required} USDC.`
+      });
+
+      let txHash = '';
+      try {
+        const onChainRes = await invokeLeaveCircle(Number(circle.circle_id), address, {
+          signTransaction,
+          signAndSubmitTx
+        });
+        txHash = onChainRes.txHash;
+        setLastTxHash(txHash);
+      } catch (onChainErr: any) {
+        console.warn('[Soroban] On-chain leave notice:', onChainErr);
+      }
+
+      const res = await leaveCircleApi(Number(circle.circle_id), address);
+      if (res.success) {
+        toast.success('Left Circle Successfully', {
+          description: txHash
+            ? `Collateral refunded on-chain. Tx: ${txHash.slice(0, 8)}...`
+            : `Your seat was freed and $${circle.collateral_required} USDC collateral was refunded.`
+        });
+        await loadCircle();
+      } else {
+        toast.error('Failed to leave circle', { description: res.error });
+      }
+    } catch (err: any) {
+      toast.error('Error leaving circle', { description: err.message });
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  // 6. Cancel Circle Action (Forming state - Creator anytime, or member after 7-day inactivity)
+  const handleCancelCircle = async () => {
+    if (!address) {
+      openModal();
+      return;
+    }
+
+    setIsActionLoading(true);
+    try {
+      toast.info('Cancelling Circle...', {
+        description: 'Refunding all joined members their staked collateral deposits.'
+      });
+
+      let txHash = '';
+      try {
+        const onChainRes = await invokeCancelCircle(Number(circle.circle_id), address, {
+          signTransaction,
+          signAndSubmitTx
+        });
+        txHash = onChainRes.txHash;
+        setLastTxHash(txHash);
+      } catch (onChainErr: any) {
+        console.warn('[Soroban] On-chain cancellation notice:', onChainErr);
+      }
+
+      const res = await cancelCircleApi(Number(circle.circle_id), address);
+      if (res.success) {
+        toast.success('Circle Cancelled & Deposits Refunded', {
+          description: txHash
+            ? `On-chain cancellation finalized. Tx: ${txHash.slice(0, 8)}...`
+            : 'Circle was cancelled and all staked collateral has been refunded to members.'
+        });
+        await loadCircle();
+      } else {
+        toast.error('Failed to cancel circle', { description: res.error });
+      }
+    } catch (err: any) {
+      toast.error('Error cancelling circle', { description: err.message });
     } finally {
       setIsActionLoading(false);
     }
@@ -608,9 +708,61 @@ export default function CircleDetailPage() {
                 <span>Stake ${circle.collateral_required} USDC & Join</span>
               </Button>
             ) : circle.status === 'Forming' && isMember ? (
-              <Badge variant="success" className="px-3 py-1.5 text-xs">
-                <CheckCircle2 className="w-4 h-4 mr-1.5" />
-                Seat Secured (${circle.collateral_required} USDC Collateral Staked)
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="success" className="px-3 py-1.5 text-xs">
+                  <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                  Seat Secured (${circle.collateral_required} USDC Staked)
+                </Badge>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={isActionLoading}
+                  onClick={handleLeaveCircle}
+                  className="text-xs text-rose-400 border-rose-500/30 hover:bg-rose-500/10 hover:text-rose-300"
+                >
+                  {isActionLoading ? (
+                    <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                  ) : (
+                    <LogOut className="w-3.5 h-3.5 mr-1.5" />
+                  )}
+                  <span>Leave Circle</span>
+                </Button>
+                {(isCreator || isFormingExpired) && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isActionLoading}
+                    onClick={handleCancelCircle}
+                    className="text-xs text-rose-400 border-rose-500/30 hover:bg-rose-500/10 hover:text-rose-300"
+                  >
+                    {isActionLoading ? (
+                      <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                    ) : (
+                      <XCircle className="w-3.5 h-3.5 mr-1.5" />
+                    )}
+                    <span>{isCreator ? 'Cancel Circle' : 'Cancel (Inactivity)'}</span>
+                  </Button>
+                )}
+              </div>
+            ) : circle.status === 'Forming' && isCreator && !isMember ? (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isActionLoading}
+                onClick={handleCancelCircle}
+                className="text-xs text-rose-400 border-rose-500/30 hover:bg-rose-500/10 hover:text-rose-300"
+              >
+                {isActionLoading ? (
+                  <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                ) : (
+                  <XCircle className="w-3.5 h-3.5 mr-1.5" />
+                )}
+                <span>Cancel Circle</span>
+              </Button>
+            ) : circle.status === 'Cancelled' ? (
+              <Badge variant="destructive" className="px-3 py-1.5 text-xs">
+                <AlertTriangle className="w-4 h-4 mr-1.5" />
+                Circle Cancelled · Collateral Refunded
               </Badge>
             ) : circle.status === 'Active' ? (
               <>

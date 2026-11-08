@@ -1,5 +1,8 @@
-use soroban_sdk::{symbol_short, Address, Env, Vec};
-use crate::types::{Circle, CircleStatus, DataKey, PayoutOrderMode, TTL_EXTEND_TO, TTL_THRESHOLD};
+use soroban_sdk::{symbol_short, token, Address, Env, Vec};
+use crate::types::{
+    Circle, CircleStatus, DataKey, Member, PayoutOrderMode, FORMING_EXPIRY_SECONDS,
+    TTL_EXTEND_TO, TTL_THRESHOLD,
+};
 
 pub fn create_circle(
     env: &Env,
@@ -63,4 +66,68 @@ pub fn get_circle_status(env: &Env, circle_id: u64) -> Circle {
     env.storage().persistent().extend_ttl(&circle_key, TTL_THRESHOLD, TTL_EXTEND_TO);
 
     circle
+}
+
+/// Cancels an unfilled circle in Forming state.
+/// - The circle creator can cancel at any time.
+/// - Any joined member can trigger cancellation after the 7-day inactivity window (FORMING_EXPIRY_SECONDS).
+/// Automatically refunds all deposited collateral to joined members and sets status to Cancelled.
+pub fn cancel_circle(env: &Env, circle_id: u64, caller: Address) {
+    caller.require_auth();
+
+    let circle_key = DataKey::Circle(circle_id);
+    let mut circle: Circle = env
+        .storage()
+        .persistent()
+        .get(&circle_key)
+        .expect("Circle not found");
+
+    if circle.status != CircleStatus::Forming {
+        panic!("Circle is not in forming state");
+    }
+
+    let is_creator = caller == circle.creator;
+    if !is_creator {
+        // Non-creator must be a joined member
+        let member_key = DataKey::Member(circle_id, caller.clone());
+        if !env.storage().persistent().has(&member_key) {
+            panic!("Caller not authorized to cancel circle");
+        }
+
+        // Must have passed inactivity / formation expiry window (7 days)
+        let now = env.ledger().timestamp();
+        if now < circle.cycle_start_time + FORMING_EXPIRY_SECONDS {
+            panic!("Cancellation window not open yet for members");
+        }
+    }
+
+    let members_key = DataKey::CircleMembers(circle_id);
+    let members: Vec<Address> = env
+        .storage()
+        .persistent()
+        .get(&members_key)
+        .unwrap_or(Vec::new(env));
+
+    let token_client = token::Client::new(env, &circle.token_address);
+    for m in members.iter() {
+        let member_key = DataKey::Member(circle_id, m.clone());
+        if let Some(mut member) = env.storage().persistent().get::<DataKey, Member>(&member_key) {
+            let refund = member.collateral_deposited;
+            if refund > 0 {
+                member.collateral_deposited = 0;
+                env.storage().persistent().set(&member_key, &member);
+                env.storage().persistent().extend_ttl(&member_key, TTL_THRESHOLD, TTL_EXTEND_TO);
+                token_client.transfer(&env.current_contract_address(), &m, &refund);
+            }
+        }
+    }
+
+    circle.status = CircleStatus::Cancelled;
+    env.storage().persistent().set(&circle_key, &circle);
+    env.storage().persistent().extend_ttl(&circle_key, TTL_THRESHOLD, TTL_EXTEND_TO);
+
+    env.events().publish(
+        (symbol_short!("cancelled"), circle_id),
+        (caller, members.len()),
+    );
 }

@@ -76,4 +76,45 @@ export const circlesRoutes: FastifyPluginAsync = async (server: FastifyInstance)
       return { success: true, member };
     }
   );
+
+  // POST /api/circles/:id/leave (Guarded by SEP-10 Wallet Authentication)
+  server.post<{ Params: { id: string }; Body: { wallet_address: string } }>(
+    '/:id/leave',
+    { preHandler: [requireAuth] },
+    async (req, reply) => {
+      if (req.user?.address !== req.body.wallet_address) {
+        return reply.status(403).send({
+          success: false,
+          statusCode: 403,
+          reqId: req.id,
+          error: `Forbidden: Authenticated wallet (${req.user?.address}) cannot leave on behalf of ${req.body.wallet_address}`
+        });
+      }
+
+      const circleId = parseInt(req.params.id, 10);
+      await circlesService.leaveCircle(circleId, req.body.wallet_address);
+      return { success: true, message: `Member ${req.body.wallet_address} left Circle #${circleId}` };
+    }
+  );
+
+  // POST /api/circles/:id/cancel (Guarded by SEP-10 Wallet Authentication)
+  server.post<{ Params: { id: string } }>(
+    '/:id/cancel',
+    { preHandler: [requireAuth] },
+    async (req, reply) => {
+      const circleId = parseInt(req.params.id, 10);
+      const caller = req.user?.address;
+      if (!caller) {
+        return reply.status(401).send({
+          success: false,
+          statusCode: 401,
+          reqId: req.id,
+          error: 'Unauthorized'
+        });
+      }
+
+      const updated = await circlesService.cancelCircle(circleId, caller);
+      return { success: true, circle: updated };
+    }
+  );
 };
