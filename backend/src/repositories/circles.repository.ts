@@ -86,6 +86,24 @@ export class CirclesRepository {
     });
     return serializeData(member);
   }
+
+  async removeMember(circleId: bigint | number, walletAddress: string) {
+    const member = await prisma.circleMember.deleteMany({
+      where: {
+        circle_id: BigInt(circleId),
+        wallet_address: walletAddress
+      }
+    });
+    return member;
+  }
+
+  async cancelCircle(circleId: bigint | number) {
+    const updated = await prisma.circleMetadata.update({
+      where: { circle_id: BigInt(circleId) },
+      data: { status: 'Cancelled' }
+    });
+    return serializeData(updated);
+  }
 }
 
 export const circlesRepository = new CirclesRepository();

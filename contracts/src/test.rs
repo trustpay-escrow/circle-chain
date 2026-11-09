@@ -270,3 +270,169 @@ fn test_events_and_ttl_management() {
     assert!(final_events.len() > events_after_payout.len());
 }
 
+#[test]
+fn test_leave_circle_in_forming_state() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register_contract(None, CircleChainContract);
+    let client = CircleChainContractClient::new(&env, &contract_id);
+
+    let creator = Address::generate(&env);
+    let user1 = Address::generate(&env);
+    let user2 = Address::generate(&env);
+    let user3 = Address::generate(&env);
+
+    let token_admin = Address::generate(&env);
+    let token_contract = env.register_stellar_asset_contract(token_admin);
+    let token_client = token::Client::new(&env, &token_contract);
+    let token_admin_client = token::StellarAssetClient::new(&env, &token_contract);
+
+    token_admin_client.mint(&user1, &1000);
+    token_admin_client.mint(&user2, &1000);
+    token_admin_client.mint(&user3, &1000);
+
+    let payout_schedule = vec![&env, user1.clone(), user2.clone(), user3.clone()];
+
+    // 1. Create circle requiring 3 members and 50 collateral
+    let circle_id = client.create_circle(
+        &creator,
+        &token_contract,
+        &100, // contribution per cycle
+        &86400, // interval (1 day)
+        &3, // member count
+        &50, // collateral required
+        &payout_schedule,
+    );
+
+    // 2. User1 and User2 join
+    client.join_circle(&circle_id, &user1);
+    client.join_circle(&circle_id, &user2);
+
+    assert_eq!(token_client.balance(&user2), 950);
+    let status_before = client.get_circle_status(&circle_id);
+    assert_eq!(status_before.status, types::CircleStatus::Forming);
+
+    // 3. User2 leaves while circle is still Forming
+    client.leave_circle(&circle_id, &user2);
+
+    // User2's 50 collateral is refunded back to their balance
+    assert_eq!(token_client.balance(&user2), 1000);
+
+    // Circle remains in Forming state with seat reopened
+    let status_after_leave = client.get_circle_status(&circle_id);
+    assert_eq!(status_after_leave.status, types::CircleStatus::Forming);
+
+    // 4. Replacement members join to complete capacity
+    let user4 = Address::generate(&env);
+    token_admin_client.mint(&user4, &1000);
+
+    client.join_circle(&circle_id, &user3);
+    client.join_circle(&circle_id, &user4);
+
+    // Circle is now Active!
+    let status_active = client.get_circle_status(&circle_id);
+    assert_eq!(status_active.status, types::CircleStatus::Active);
+}
+
+#[test]
+fn test_cancel_circle_by_creator() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register_contract(None, CircleChainContract);
+    let client = CircleChainContractClient::new(&env, &contract_id);
+
+    let creator = Address::generate(&env);
+    let user1 = Address::generate(&env);
+    let user2 = Address::generate(&env);
+
+    let token_admin = Address::generate(&env);
+    let token_contract = env.register_stellar_asset_contract(token_admin);
+    let token_client = token::Client::new(&env, &token_contract);
+    let token_admin_client = token::StellarAssetClient::new(&env, &token_contract);
+
+    token_admin_client.mint(&user1, &1000);
+    token_admin_client.mint(&user2, &1000);
+
+    let payout_schedule = vec![&env, user1.clone(), user2.clone()];
+
+    // Create 3-member circle
+    let circle_id = client.create_circle(
+        &creator,
+        &token_contract,
+        &100,
+        &86400,
+        &3,
+        &75, // collateral required
+        &payout_schedule,
+    );
+
+    // User1 and User2 join and deposit 75 collateral each
+    client.join_circle(&circle_id, &user1);
+    client.join_circle(&circle_id, &user2);
+
+    assert_eq!(token_client.balance(&user1), 925);
+    assert_eq!(token_client.balance(&user2), 925);
+
+    // Creator cancels the unfilled circle
+    client.cancel_circle(&circle_id, &creator);
+
+    let status = client.get_circle_status(&circle_id);
+    assert_eq!(status.status, types::CircleStatus::Cancelled);
+
+    // Both user1 and user2 receive their 75 collateral refunded
+    assert_eq!(token_client.balance(&user1), 1000);
+    assert_eq!(token_client.balance(&user2), 1000);
+}
+
+#[test]
+fn test_cancel_circle_by_member_after_expiry() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register_contract(None, CircleChainContract);
+    let client = CircleChainContractClient::new(&env, &contract_id);
+
+    let creator = Address::generate(&env);
+    let user1 = Address::generate(&env);
+
+    let token_admin = Address::generate(&env);
+    let token_contract = env.register_stellar_asset_contract(token_admin);
+    let token_client = token::Client::new(&env, &token_contract);
+    let token_admin_client = token::StellarAssetClient::new(&env, &token_contract);
+
+    token_admin_client.mint(&user1, &1000);
+
+    let payout_schedule = vec![&env, user1.clone()];
+
+    let circle_id = client.create_circle(
+        &creator,
+        &token_contract,
+        &100,
+        &86400,
+        &3,
+        &50,
+        &payout_schedule,
+    );
+
+    // User1 joins and deposits 50 collateral
+    client.join_circle(&circle_id, &user1);
+    assert_eq!(token_client.balance(&user1), 950);
+
+    // Fast-forward past 7 days expiry window
+    let current_ts = env.ledger().timestamp();
+    env.ledger().with_mut(|li| {
+        li.timestamp = current_ts + types::FORMING_EXPIRY_SECONDS + 10;
+    });
+
+    // Joined member cancels after 7-day inactivity
+    client.cancel_circle(&circle_id, &user1);
+
+    let status = client.get_circle_status(&circle_id);
+    assert_eq!(status.status, types::CircleStatus::Cancelled);
+
+    // User1 collateral is refunded in full
+    assert_eq!(token_client.balance(&user1), 1000);
+}
+

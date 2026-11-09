@@ -38,6 +38,40 @@ export class CirclesService {
 
     return circlesRepository.addMember(circleId, walletAddress, collateralStaked);
   }
+
+  async leaveCircle(circleId: number, walletAddress: string) {
+    if (!isValidStellarPublicKey(walletAddress)) {
+      throw new Error(`Invalid Stellar wallet address format: ${walletAddress}`);
+    }
+
+    const circle = await circlesRepository.findById(circleId);
+    if (!circle) {
+      throw new Error(`Circle #${circleId} not found`);
+    }
+
+    if (circle.status !== 'Forming') {
+      throw new Error(`Cannot leave circle with status ${circle.status}`);
+    }
+
+    return circlesRepository.removeMember(circleId, walletAddress);
+  }
+
+  async cancelCircle(circleId: number, callerAddress: string) {
+    if (!isValidStellarPublicKey(callerAddress)) {
+      throw new Error(`Invalid Stellar caller address format: ${callerAddress}`);
+    }
+
+    const circle = await circlesRepository.findById(circleId);
+    if (!circle) {
+      throw new Error(`Circle #${circleId} not found`);
+    }
+
+    if (circle.status !== 'Forming') {
+      throw new Error(`Cannot cancel circle with status ${circle.status}`);
+    }
+
+    return circlesRepository.cancelCircle(circleId);
+  }
 }
 
 export const circlesService = new CirclesService();

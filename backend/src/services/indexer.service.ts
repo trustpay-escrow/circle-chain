@@ -192,6 +192,12 @@ export class SorobanEventIndexer {
       case 'unwound':
         await this.handleEmergencyUnwind(event);
         break;
+      case 'left':
+        await this.handleMemberLeft(event);
+        break;
+      case 'cancelled':
+        await this.handleCircleCancelled(event);
+        break;
       default:
         logger.debug(`[Soroban Indexer] Unhandled event topic: ${event.eventName}`);
     }
@@ -400,6 +406,38 @@ export class SorobanEventIndexer {
     await prisma.circleMetadata.updateMany({
       where: { circle_id: event.circleId },
       data: { status: 'Terminated' }
+    });
+  }
+
+  // 9. Member Left Forming Circle Event Handler
+  private async handleMemberLeft(event: ParsedEvent) {
+    const [memberAddress, refundStroops] = Array.isArray(event.data)
+      ? event.data
+      : [event.data?.member_address, event.data?.refund_amount];
+
+    if (!memberAddress) return;
+    const refundDecimal = Number(refundStroops || 0) / 10_000_000;
+
+    await prisma.circleMember.deleteMany({
+      where: {
+        circle_id: event.circleId,
+        wallet_address: String(memberAddress)
+      }
+    });
+
+    await prisma.userProfile.updateMany({
+      where: { wallet_address: String(memberAddress) },
+      data: {
+        total_collateral_staked: { decrement: refundDecimal }
+      }
+    });
+  }
+
+  // 10. Circle Cancelled Event Handler
+  private async handleCircleCancelled(event: ParsedEvent) {
+    await prisma.circleMetadata.updateMany({
+      where: { circle_id: event.circleId },
+      data: { status: 'Cancelled' }
     });
   }
 }

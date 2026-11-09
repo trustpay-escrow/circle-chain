@@ -287,6 +287,70 @@ export async function invokeWithdrawCollateral(
 }
 
 /**
+ * Invokes leave_circle on the Soroban smart contract
+ * Allows member to exit an unfilled forming circle and refunds collateral
+ */
+export async function invokeLeaveCircle(
+  circleId: number,
+  memberAddress: string,
+  signer?: SorobanSigner
+): Promise<{ success: boolean; txHash: string }> {
+  const server = getSorobanServer();
+  const account = await getAccount(memberAddress);
+  const contract = new StellarSdk.Contract(CONTRACT_ID);
+
+  const tx = new StellarSdk.TransactionBuilder(account, {
+    fee: BASE_FEE,
+    networkPassphrase: NETWORK_PASSPHRASE
+  })
+    .addOperation(
+      contract.call(
+        'leave_circle',
+        StellarSdk.nativeToScVal(BigInt(circleId), { type: 'u64' }),
+        new StellarSdk.Address(memberAddress).toScVal()
+      )
+    )
+    .setTimeout(60)
+    .build();
+
+  const preparedTx = await server.prepareTransaction(tx);
+  const txHash = await signAndSubmit(preparedTx.toXDR(), signer);
+  return { success: true, txHash };
+}
+
+/**
+ * Invokes cancel_circle on the Soroban smart contract
+ * Allows creator (or joined member after 7-day inactivity) to cancel circle and refund all deposits
+ */
+export async function invokeCancelCircle(
+  circleId: number,
+  callerAddress: string,
+  signer?: SorobanSigner
+): Promise<{ success: boolean; txHash: string }> {
+  const server = getSorobanServer();
+  const account = await getAccount(callerAddress);
+  const contract = new StellarSdk.Contract(CONTRACT_ID);
+
+  const tx = new StellarSdk.TransactionBuilder(account, {
+    fee: BASE_FEE,
+    networkPassphrase: NETWORK_PASSPHRASE
+  })
+    .addOperation(
+      contract.call(
+        'cancel_circle',
+        StellarSdk.nativeToScVal(BigInt(circleId), { type: 'u64' }),
+        new StellarSdk.Address(callerAddress).toScVal()
+      )
+    )
+    .setTimeout(60)
+    .build();
+
+  const preparedTx = await server.prepareTransaction(tx);
+  const txHash = await signAndSubmit(preparedTx.toXDR(), signer);
+  return { success: true, txHash };
+}
+
+/**
  * Invokes create_circle on the Soroban smart contract
  */
 export async function invokeCreateCircle(

@@ -45,6 +45,16 @@ impl CircleChainContract {
         member::join_circle(&env, circle_id, member_address);
     }
 
+    /// Allows a member to leave an unfilled circle in Forming status and refunds deposited collateral
+    pub fn leave_circle(env: Env, circle_id: u64, member_address: Address) {
+        member::leave_circle(&env, circle_id, member_address);
+    }
+
+    /// Cancels a circle in Forming state (creator anytime, or any joined member after 7-day inactivity) and refunds all deposits
+    pub fn cancel_circle(env: Env, circle_id: u64, caller: Address) {
+        circle::cancel_circle(&env, circle_id, caller);
+    }
+
     /// Deposit contribution for the current cycle
     pub fn contribute(env: Env, circle_id: u64, member_address: Address, amount: i128) {
         payout::contribute(&env, circle_id, member_address, amount);

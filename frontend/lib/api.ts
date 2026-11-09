@@ -232,6 +232,59 @@ export async function joinCircleApi(
   }
 }
 
+// 4b. Leave a circle in Forming state (refunds collateral & removes from roster)
+export async function leaveCircleApi(
+  circleId: number,
+  walletAddress: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const token = getAuthToken(walletAddress);
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const res = await fetch(`${BACKEND_URL}/api/circles/${circleId}/leave`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ wallet_address: walletAddress })
+    });
+
+    const data = await res.json();
+    if (res.ok && data.success) {
+      return { success: true };
+    }
+    return { success: false, error: data.error || 'Failed to leave circle' };
+  } catch (err: any) {
+    console.error(`[CircleChain API] Failed to leave circle #${circleId}:`, err);
+    return { success: false, error: err.message || 'Network error leaving circle' };
+  }
+}
+
+// 4c. Cancel a circle in Forming state (refunds all deposits to joined members)
+export async function cancelCircleApi(
+  circleId: number,
+  callerAddress: string
+): Promise<{ success: boolean; circle?: CircleData; error?: string }> {
+  try {
+    const token = getAuthToken(callerAddress);
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const res = await fetch(`${BACKEND_URL}/api/circles/${circleId}/cancel`, {
+      method: 'POST',
+      headers
+    });
+
+    const data = await res.json();
+    if (res.ok && data.success) {
+      return { success: true, circle: data.circle };
+    }
+    return { success: false, error: data.error || 'Failed to cancel circle' };
+  } catch (err: any) {
+    console.error(`[CircleChain API] Failed to cancel circle #${circleId}:`, err);
+    return { success: false, error: err.message || 'Network error cancelling circle' };
+  }
+}
+
 // 5. Record cycle contribution payment
 export async function recordContributionApi(payload: {
   circle_id: number;

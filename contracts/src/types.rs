@@ -9,6 +9,7 @@ pub enum CircleStatus {
     Completed, // All cycles finished and all payouts distributed
     Defaulted, // A member defaulted and collateral could not cover deficit
     Terminated, // Circle emergency unwound; members can withdraw remaining collateral & unreleased funds
+    Cancelled, // Circle cancelled before formation; all deposits refunded
 }
 
 /// Defines the recipient selection mechanism per cycle
@@ -63,6 +64,9 @@ pub enum DataKey {
 // TODO: DESIGN DECISION FOR USER
 // 1. Grace period: Default 86400 seconds (24 hours). Adjust based on network/wallet friction requirements.
 pub const DEFAULT_GRACE_PERIOD_SECONDS: u64 = 86_400;
+
+/// Grace window for circle formation before any member can trigger cancellation (7 days = 604,800 seconds)
+pub const FORMING_EXPIRY_SECONDS: u64 = 7 * 86_400;
 
 // TODO: DESIGN DECISION FOR USER
 // 2. Slashing penalty percentage: 100% of collateral is currently slashed to cover missing pot.

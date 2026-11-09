@@ -22,6 +22,10 @@ pub fn join_circle(env: &Env, circle_id: u64, member_address: Address) {
         .get(&members_key)
         .unwrap_or(Vec::new(env));
 
+    if members.iter().any(|m| m == member_address) {
+        panic!("Member already joined");
+    }
+
     if members.len() >= circle.member_count {
         panic!("Circle capacity reached");
     }
@@ -67,5 +71,69 @@ pub fn join_circle(env: &Env, circle_id: u64, member_address: Address) {
     env.events().publish(
         (symbol_short!("joined"), circle_id),
         (member_address, circle.collateral_required, members.len()),
+    );
+}
+
+/// Allows a joined member to leave an unfilled circle in Forming status,
+/// automatically refunding their staked collateral and freeing up the seat.
+pub fn leave_circle(env: &Env, circle_id: u64, member_address: Address) {
+    member_address.require_auth();
+
+    let circle_key = DataKey::Circle(circle_id);
+    let circle: Circle = env
+        .storage()
+        .persistent()
+        .get(&circle_key)
+        .expect("Circle not found");
+
+    if circle.status != CircleStatus::Forming {
+        panic!("Cannot leave circle after formation");
+    }
+
+    let member_key = DataKey::Member(circle_id, member_address.clone());
+    let member: Member = env
+        .storage()
+        .persistent()
+        .get(&member_key)
+        .expect("Member not in circle");
+
+    let members_key = DataKey::CircleMembers(circle_id);
+    let members: Vec<Address> = env
+        .storage()
+        .persistent()
+        .get(&members_key)
+        .expect("Members list not found");
+
+    let mut new_members: Vec<Address> = Vec::new(env);
+    let mut found = false;
+    for m in members.iter() {
+        if m == member_address {
+            found = true;
+        } else {
+            new_members.push_back(m);
+        }
+    }
+
+    if !found {
+        panic!("Member not found in members list");
+    }
+
+    // Refund collateral to member
+    let refund_amount = member.collateral_deposited;
+    if refund_amount > 0 {
+        let client = token::Client::new(env, &circle.token_address);
+        client.transfer(&env.current_contract_address(), &member_address, &refund_amount);
+    }
+
+    // Clean up persistent storage and update member list
+    env.storage().persistent().remove(&member_key);
+    env.storage().persistent().set(&members_key, &new_members);
+    env.storage().persistent().extend_ttl(&members_key, TTL_THRESHOLD, TTL_EXTEND_TO);
+    env.storage().persistent().extend_ttl(&circle_key, TTL_THRESHOLD, TTL_EXTEND_TO);
+
+    // Emit member left event
+    env.events().publish(
+        (symbol_short!("left"), circle_id),
+        (member_address, refund_amount, new_members.len()),
     );
 }
