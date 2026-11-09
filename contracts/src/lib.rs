@@ -4,13 +4,14 @@ pub mod types;
 pub mod circle;
 pub mod member;
 pub mod payout;
+pub mod auction;
 pub mod default_logic;
 
 #[cfg(test)]
 pub mod test;
 
 use soroban_sdk::{contract, contractimpl, Env, Address, Vec};
-use types::Circle;
+use types::{Circle, PayoutOrderMode};
 
 #[contract]
 pub struct CircleChainContract;
@@ -27,6 +28,7 @@ impl CircleChainContract {
         member_count: u32,
         collateral_required: i128,
         payout_schedule: Vec<Address>,
+        payout_order_mode: PayoutOrderMode,
     ) -> u64 {
         circle::create_circle(
             &env,
@@ -37,6 +39,7 @@ impl CircleChainContract {
             member_count,
             collateral_required,
             payout_schedule,
+            payout_order_mode,
         )
     }
 
@@ -58,6 +61,22 @@ impl CircleChainContract {
     /// Deposit contribution for the current cycle
     pub fn contribute(env: Env, circle_id: u64, member_address: Address, amount: i128) {
         payout::contribute(&env, circle_id, member_address, amount);
+    }
+
+    /// Submits an auction bid for the communal pot in BidBased mode
+    pub fn submit_bid(
+        env: Env,
+        circle_id: u64,
+        cycle_index: u32,
+        bidder: Address,
+        discount_amount: i128,
+    ) {
+        auction::submit_bid(&env, circle_id, cycle_index, bidder, discount_amount);
+    }
+
+    /// Retrieves all bids submitted for a specific cycle in BidBased mode
+    pub fn get_cycle_bids(env: Env, circle_id: u64, cycle_index: u32) -> Vec<types::Bid> {
+        auction::get_cycle_bids(&env, circle_id, cycle_index)
     }
 
     /// Release payout to current recipient if all contributions are received

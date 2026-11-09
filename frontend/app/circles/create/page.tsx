@@ -64,7 +64,8 @@ export default function CreateCirclePage() {
               intervalDays: formData.intervalDays,
               memberCount: formData.memberCount,
               collateralRequired: formData.collateralRequired,
-              payoutSchedule: [address]
+              payoutSchedule: [address],
+              payoutMode: formData.payoutMode
             },
             { signTransaction, signAndSubmitTx }
           );
@@ -195,6 +196,26 @@ export default function CreateCirclePage() {
                   <option value={14}>14 Days (Bi-weekly)</option>
                   <option value={30}>30 Days (Monthly)</option>
                 </select>
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
+                  Payout Distribution Mode (ROSCA Turn Allocation)
+                </label>
+                <select
+                  value={formData.payoutMode}
+                  onChange={(e) => setFormData({ ...formData, payoutMode: e.target.value })}
+                  className="w-full h-11 bg-slate-950 border border-slate-800 rounded-xl px-4 text-white focus:outline-none focus:border-emerald-500 text-sm transition-colors"
+                >
+                  <option value="Fixed">Fixed Schedule (Pre-determined roster order)</option>
+                  <option value="Randomized">Randomized Mode (Verifiable PRNG shuffle upon full formation)</option>
+                  <option value="BidBased">Bid-Based Mode (Chit Fund Auction with member dividend bonuses)</option>
+                </select>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  {formData.payoutMode === 'Fixed' && 'Turns are awarded in the order members joined the circle.'}
+                  {formData.payoutMode === 'Randomized' && 'Upon circle activation, turn order is shuffled transparently on-chain using Soroban PRNG.'}
+                  {formData.payoutMode === 'BidBased' && 'Each cycle, members bid a discount to win the pot early; the discount surplus is paid out as a dividend to all other members.'}
+                </p>
               </div>
             </div>
           </div>

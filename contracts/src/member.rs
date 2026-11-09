@@ -1,5 +1,5 @@
 use soroban_sdk::{symbol_short, token, Address, Env, Vec};
-use crate::types::{Circle, CircleStatus, DataKey, Member, TTL_EXTEND_TO, TTL_THRESHOLD};
+use crate::types::{Circle, CircleStatus, DataKey, Member, PayoutOrderMode, TTL_EXTEND_TO, TTL_THRESHOLD};
 
 pub fn join_circle(env: &Env, circle_id: u64, member_address: Address) {
     member_address.require_auth();
@@ -57,6 +57,26 @@ pub fn join_circle(env: &Env, circle_id: u64, member_address: Address) {
     if members.len() == circle.member_count {
         circle.status = CircleStatus::Active;
         circle.cycle_start_time = env.ledger().timestamp();
+
+        match circle.payout_order_mode {
+            PayoutOrderMode::Randomized => {
+                circle.payout_schedule = members.clone();
+                env.prng().shuffle(&mut circle.payout_schedule);
+
+                env.events().publish(
+                    (symbol_short!("shuffled"), circle_id),
+                    circle.payout_schedule.clone(),
+                );
+            }
+            PayoutOrderMode::BidBased => {
+                circle.payout_schedule = members.clone();
+            }
+            PayoutOrderMode::Fixed => {
+                if circle.payout_schedule.len() < circle.member_count {
+                    circle.payout_schedule = members.clone();
+                }
+            }
+        }
 
         env.events().publish(
             (symbol_short!("activated"), circle_id),

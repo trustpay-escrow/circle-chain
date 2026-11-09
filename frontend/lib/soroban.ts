@@ -351,6 +351,46 @@ export async function invokeCancelCircle(
 }
 
 /**
+ * Submits an auction bid for the cycle communal pot in BidBased mode
+ */
+export async function invokeSubmitBid(
+  circleId: number,
+  cycleIndex: number,
+  bidderAddress: string,
+  discountAmount: number | bigint,
+  signer?: SorobanSigner
+): Promise<{ success: boolean; txHash: string }> {
+  const server = getSorobanServer();
+  const account = await getAccount(bidderAddress);
+  const contract = new StellarSdk.Contract(CONTRACT_ID);
+
+  const discountStroops =
+    typeof discountAmount === 'bigint'
+      ? discountAmount
+      : BigInt(Math.floor(Number(discountAmount) * 10_000_000));
+
+  const tx = new StellarSdk.TransactionBuilder(account, {
+    fee: BASE_FEE,
+    networkPassphrase: NETWORK_PASSPHRASE
+  })
+    .addOperation(
+      contract.call(
+        'submit_bid',
+        StellarSdk.nativeToScVal(BigInt(circleId), { type: 'u64' }),
+        StellarSdk.nativeToScVal(cycleIndex, { type: 'u32' }),
+        new StellarSdk.Address(bidderAddress).toScVal(),
+        StellarSdk.nativeToScVal(discountStroops, { type: 'i128' })
+      )
+    )
+    .setTimeout(60)
+    .build();
+
+  const preparedTx = await server.prepareTransaction(tx);
+  const txHash = await signAndSubmit(preparedTx.toXDR(), signer);
+  return { success: true, txHash };
+}
+
+/**
  * Invokes create_circle on the Soroban smart contract
  */
 export async function invokeCreateCircle(
@@ -362,6 +402,7 @@ export async function invokeCreateCircle(
     memberCount: number;
     collateralRequired: number | bigint;
     payoutSchedule?: string[];
+    payoutMode?: string;
   },
   signer?: SorobanSigner
 ): Promise<{ success: boolean; txHash: string }> {
@@ -389,6 +430,14 @@ export async function invokeCreateCircle(
 
   const scheduleScVals = scheduleAddresses.map((addr) => new StellarSdk.Address(addr).toScVal());
 
+  const modeName =
+    params.payoutMode === 'Randomized'
+      ? 'Randomized'
+      : params.payoutMode === 'BidBased'
+      ? 'BidBased'
+      : 'Fixed';
+  const modeScVal = StellarSdk.xdr.ScVal.scvVec([StellarSdk.xdr.ScVal.scvSymbol(modeName)]);
+
   const tx = new StellarSdk.TransactionBuilder(account, {
     fee: BASE_FEE,
     networkPassphrase: NETWORK_PASSPHRASE
@@ -402,7 +451,8 @@ export async function invokeCreateCircle(
         StellarSdk.nativeToScVal(intervalSeconds, { type: 'u64' }),
         StellarSdk.nativeToScVal(params.memberCount, { type: 'u32' }),
         StellarSdk.nativeToScVal(collateralStroops, { type: 'i128' }),
-        StellarSdk.xdr.ScVal.scvVec(scheduleScVals)
+        StellarSdk.xdr.ScVal.scvVec(scheduleScVals),
+        modeScVal
       )
     )
     .setTimeout(60)
