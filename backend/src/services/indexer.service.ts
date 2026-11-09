@@ -198,6 +198,15 @@ export class SorobanEventIndexer {
       case 'cancelled':
         await this.handleCircleCancelled(event);
         break;
+      case 'shuffled':
+        await this.handleCircleShuffled(event);
+        break;
+      case 'bid':
+        await this.handleBidSubmitted(event);
+        break;
+      case 'bid_win':
+        await this.handleBidWin(event);
+        break;
       default:
         logger.debug(`[Soroban Indexer] Unhandled event topic: ${event.eventName}`);
     }
@@ -439,6 +448,83 @@ export class SorobanEventIndexer {
       where: { circle_id: event.circleId },
       data: { status: 'Cancelled' }
     });
+  }
+
+  // 11. Circle Shuffled Event Handler (Randomized Mode)
+  private async handleCircleShuffled(event: ParsedEvent) {
+    logger.info(`[Soroban Indexer] Circle #${event.circleId} payout schedule shuffled on-chain`);
+    await prisma.circleMetadata.updateMany({
+      where: { circle_id: event.circleId },
+      data: { payout_mode: 'Randomized' }
+    });
+  }
+
+  // 12. Auction Bid Submitted Event Handler (BidBased Mode)
+  private async handleBidSubmitted(event: ParsedEvent) {
+    const [bidder, cycleIndex, discountStroops] = Array.isArray(event.data)
+      ? event.data
+      : [event.data?.bidder, event.data?.cycle_index, event.data?.discount_amount];
+
+    if (!bidder) return;
+    const discountDecimal = Number(discountStroops || 0) / 10_000_000;
+    const cycle = Number(cycleIndex || 0);
+
+    await prisma.notification.create({
+      data: {
+        wallet_address: String(bidder),
+        circle_id: event.circleId,
+        message: `Auction bid submitted with $${discountDecimal} discount for Cycle #${cycle + 1}!`,
+        notification_type: 'bid_submitted'
+      }
+    });
+  }
+
+  // 13. Auction Pot & Dividend Released Event Handler (BidBased Mode)
+  private async handleBidWin(event: ParsedEvent) {
+    const [winner, winnerPotStroops, _winningDiscount, dividendStroops] = Array.isArray(event.data)
+      ? event.data
+      : [event.data?.winner, event.data?.winner_pot, event.data?.winning_discount, event.data?.dividend_per_other_member];
+
+    if (!winner) return;
+    const winnerPot = Number(winnerPotStroops || 0) / 10_000_000;
+    const dividend = Number(dividendStroops || 0) / 10_000_000;
+
+    await prisma.circleMember.updateMany({
+      where: {
+        circle_id: event.circleId,
+        wallet_address: String(winner)
+      },
+      data: { payout_received: true }
+    });
+
+    await prisma.notification.create({
+      data: {
+        wallet_address: String(winner),
+        circle_id: event.circleId,
+        message: `You won the cycle pot auction with a payout of $${winnerPot} USDC!`,
+        notification_type: 'bid_won'
+      }
+    });
+
+    if (dividend > 0) {
+      const otherMembers = await prisma.circleMember.findMany({
+        where: {
+          circle_id: event.circleId,
+          wallet_address: { not: String(winner) }
+        }
+      });
+
+      for (const m of otherMembers) {
+        await prisma.notification.create({
+          data: {
+            wallet_address: m.wallet_address,
+            circle_id: event.circleId,
+            message: `Auction dividend bonus of $${dividend} USDC credited from winning bid discount!`,
+            notification_type: 'auction_dividend'
+          }
+        });
+      }
+    }
   }
 }
 

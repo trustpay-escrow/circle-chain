@@ -20,7 +20,8 @@ import {
   ArrowUpRight,
   AlertTriangle,
   LogOut,
-  XCircle
+  XCircle,
+  Gavel
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -30,6 +31,7 @@ import {
   cancelCircleApi,
   recordContributionApi,
   releasePayoutApi,
+  submitBidApi,
   CircleData,
   ContributionData
 } from '../../../lib/api';
@@ -39,6 +41,7 @@ import {
   invokeLeaveCircle,
   invokeCancelCircle,
   invokeContribute,
+  invokeSubmitBid,
   invokeReleasePayout,
   invokeWithdrawCollateral,
   CONTRACT_ID
@@ -47,6 +50,7 @@ import { ContributionGrid } from '../../../components/contribution-grid';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../../../components/ui/card';
 import { Badge } from '../../../components/ui/badge';
 import { Button } from '../../../components/ui/button';
+import { Input } from '../../../components/ui/input';
 
 export default function CircleDetailPage() {
   const params = useParams();
@@ -58,6 +62,7 @@ export default function CircleDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [lastTxHash, setLastTxHash] = useState<string | null>(null);
+  const [bidDiscount, setBidDiscount] = useState<number>(10);
   const [timeLeft, setTimeLeft] = useState<{
     days: number;
     hours: number;
@@ -204,6 +209,11 @@ export default function CircleDetailPage() {
   const isUserTurnRecipient =
     address && currentRecipientAddress.toLowerCase() === address.toLowerCase();
   const hasRecipientReceivedPayout = currentRecipientMember?.payout_received || false;
+
+  const currentUserMember = circle.members?.find(
+    (m) => address && m.wallet_address.toLowerCase() === address.toLowerCase()
+  );
+  const hasUserReceivedPayout = currentUserMember?.payout_received || false;
 
   // Badge Status helper
   const getStatusBadge = (status: string) => {
@@ -483,6 +493,68 @@ export default function CircleDetailPage() {
       }
     } catch (err: any) {
       toast.error('Error cancelling circle', { description: err.message });
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  // 7. Submit Auction Bid (BidBased mode - On-Chain Soroban + Backend sync)
+  const handleSubmitBid = async () => {
+    if (!address) {
+      openModal();
+      return;
+    }
+
+    if (!bidDiscount || bidDiscount <= 0 || bidDiscount >= targetPot) {
+      toast.error('Invalid bid discount', {
+        description: `Bid discount must be greater than 0 and less than total pot ($${targetPot} USDC).`
+      });
+      return;
+    }
+
+    setIsActionLoading(true);
+    try {
+      toast.info('Submitting Auction Bid...', {
+        description: `Submitting discount bid of $${bidDiscount} USDC for Cycle #${currentCycle + 1}.`
+      });
+
+      let txHash = '';
+      try {
+        const onChainRes = await invokeSubmitBid(
+          Number(circle.circle_id),
+          currentCycle,
+          address,
+          BigInt(Math.floor(bidDiscount)),
+          {
+            signTransaction,
+            signAndSubmitTx
+          }
+        );
+        txHash = onChainRes.txHash;
+        setLastTxHash(txHash);
+      } catch (onChainErr: any) {
+        console.warn('[Soroban] On-chain bid notice:', onChainErr);
+      }
+
+      const res = await submitBidApi({
+        circle_id: Number(circle.circle_id),
+        cycle_index: currentCycle,
+        bidder_address: address,
+        discount_amount: Number(bidDiscount)
+      });
+
+      if (res.success) {
+        toast.success('Bid Placed Successfully!', {
+          description: txHash
+            ? `On-chain auction bid recorded. Tx: ${txHash.slice(0, 8)}...`
+            : `Your discount offer of $${bidDiscount} USDC has been submitted.`
+        });
+        await loadCircle();
+      } else {
+        toast.error('Failed to submit bid', { description: res.error });
+      }
+    } catch (err: any) {
+      toast.error('Error placing bid', { description: err.message });
     } finally {
       setIsActionLoading(false);
     }
@@ -823,6 +895,99 @@ export default function CircleDetailPage() {
           </div>
         </div>
       </Card>
+
+      {/* Live Turn Auction Card (for BidBased ROSCA Mode) */}
+      {circle.status === 'Active' && circle.payout_mode === 'BidBased' && (
+        <Card className="p-6 bg-gradient-to-r from-slate-900 via-amber-950/20 to-slate-900 border-amber-500/30 shadow-xl space-y-4">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center space-x-3">
+              <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400">
+                <Gavel className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="flex items-center space-x-2">
+                  <h3 className="text-lg font-bold text-white">
+                    Cycle #{currentCycle + 1} Turn Auction
+                  </h3>
+                  <Badge variant="warning" className="text-xs">
+                    Live Chit-Fund Auction
+                  </Badge>
+                </div>
+                <p className="text-xs text-slate-400 max-w-xl mt-1">
+                  Need the pot early? Offer a discount from the ${targetPot} USDC communal pot. The member offering the highest discount wins the pot, and the discount surplus is distributed as a cash dividend bonus equally across all other members!
+                </p>
+              </div>
+            </div>
+
+            <div className="text-right">
+              <span className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Total Pot Up For Auction</span>
+              <p className="text-2xl font-bold font-mono text-amber-400">${targetPot} USDC</p>
+            </div>
+          </div>
+
+          <div className="border-t border-slate-800 pt-4">
+            {!address ? (
+              <p className="text-xs text-slate-400 italic">
+                Connect your wallet to participate in the cycle turn auction.
+              </p>
+            ) : !isMember ? (
+              <p className="text-xs text-slate-400 italic">
+                Only active circle members who have staked collateral can place bids.
+              </p>
+            ) : hasUserReceivedPayout ? (
+              <div className="flex items-center space-x-2 text-xs text-emerald-400 bg-emerald-500/10 p-3 rounded-lg border border-emerald-500/20">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>
+                  You have already received your payout pot in a previous cycle. You are now entitled to receive dividend surplus bonuses from this auction!
+                </span>
+              </div>
+            ) : (
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
+                <div className="flex-1 space-y-1">
+                  <label className="text-xs text-slate-300 font-medium">
+                    Your Discount Offer (USDC off the ${targetPot} pot)
+                  </label>
+                  <div className="flex items-center space-x-2">
+                    <Input
+                      type="number"
+                      min={1}
+                      max={targetPot - 1}
+                      step={1}
+                      value={bidDiscount}
+                      onChange={(e) => setBidDiscount(Math.max(1, Number(e.target.value)))}
+                      className="bg-slate-950 border-slate-700 text-white font-mono w-40"
+                      placeholder="e.g. 15"
+                    />
+                    <div className="text-xs text-slate-400 space-y-0.5">
+                      <div>
+                        You receive: <span className="font-semibold text-white font-mono">${Math.max(0, targetPot - bidDiscount)} USDC</span>
+                      </div>
+                      <div>
+                        Dividend to peers: <span className="text-emerald-400 font-mono">+${memberCount > 1 ? (bidDiscount / (memberCount - 1)).toFixed(2) : 0} USDC each</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <Button
+                  variant="gradient"
+                  size="md"
+                  disabled={isActionLoading || bidDiscount <= 0 || bidDiscount >= targetPot}
+                  onClick={handleSubmitBid}
+                  className="sm:self-end"
+                >
+                  {isActionLoading ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Gavel className="w-4 h-4 mr-2" />
+                  )}
+                  <span>Place ${bidDiscount} USDC Bid</span>
+                </Button>
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
 
       {/* Connected Transparency Matrix (ContributionGrid) */}
       <ContributionGrid

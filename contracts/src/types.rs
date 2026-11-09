@@ -50,6 +50,15 @@ pub struct Member {
     pub reputation_score: u32,
 }
 
+/// Represents an auction bid submitted in BidBased (Chit fund) mode
+#[contracttype]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Bid {
+    pub bidder: Address,
+    pub discount_amount: i128,
+    pub timestamp: u64,
+}
+
 /// Storage keys for contract persistent & instance data
 #[contracttype]
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -59,6 +68,7 @@ pub enum DataKey {
     Member(u64, Address),
     CircleMembers(u64),
     CycleContributions(u64, u32), // (circle_id, cycle_index) -> Vec<Address> paid members
+    CycleBids(u64, u32),          // (circle_id, cycle_index) -> Vec<Bid> submitted auction bids
 }
 
 // TODO: DESIGN DECISION FOR USER

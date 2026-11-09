@@ -13,6 +13,7 @@ pub fn create_circle(
     member_count: u32,
     collateral_required: i128,
     payout_schedule: Vec<Address>,
+    payout_order_mode: PayoutOrderMode,
 ) -> u64 {
     creator.require_auth();
 
@@ -31,7 +32,7 @@ pub fn create_circle(
         contribution_amount,
         interval,
         member_count,
-        payout_order_mode: PayoutOrderMode::Fixed,
+        payout_order_mode,
         collateral_required,
         current_cycle: 0,
         cycle_start_time: env.ledger().timestamp(),

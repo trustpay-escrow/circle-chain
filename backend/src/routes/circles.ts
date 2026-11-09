@@ -117,4 +117,45 @@ export const circlesRoutes: FastifyPluginAsync = async (server: FastifyInstance)
       return { success: true, circle: updated };
     }
   );
+
+  // POST /api/circles/:id/bids (Guarded by SEP-10 Wallet Authentication)
+  server.post<{
+    Params: { id: string };
+    Body: { cycle_index: number; bidder_address: string; discount_amount: number };
+  }>(
+    '/:id/bids',
+    { preHandler: [requireAuth] },
+    async (req, reply) => {
+      if (req.user?.address !== req.body.bidder_address) {
+        return reply.status(403).send({
+          success: false,
+          statusCode: 403,
+          reqId: req.id,
+          error: `Forbidden: Authenticated wallet (${req.user?.address}) cannot submit a bid on behalf of ${req.body.bidder_address}`
+        });
+      }
+
+      const circleId = parseInt(req.params.id, 10);
+      const circle = await circlesService.getCircleById(circleId);
+      if (!circle) {
+        return reply.status(404).send({
+          success: false,
+          statusCode: 404,
+          reqId: req.id,
+          error: `Circle #${circleId} not found`
+        });
+      }
+
+      return {
+        success: true,
+        bid: {
+          circle_id: circleId,
+          cycle_index: req.body.cycle_index,
+          bidder_address: req.body.bidder_address,
+          discount_amount: req.body.discount_amount,
+          submitted_at: new Date().toISOString()
+        }
+      };
+    }
+  );
 };

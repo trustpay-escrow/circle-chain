@@ -285,6 +285,35 @@ export async function cancelCircleApi(
   }
 }
 
+// 4d. Submit an auction bid in BidBased mode
+export async function submitBidApi(payload: {
+  circle_id: number;
+  cycle_index: number;
+  bidder_address: string;
+  discount_amount: number;
+}): Promise<{ success: boolean; bid?: any; error?: string }> {
+  try {
+    const token = getAuthToken(payload.bidder_address);
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const res = await fetch(`${BACKEND_URL}/api/circles/${payload.circle_id}/bids`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload)
+    });
+
+    const data = await res.json();
+    if (res.ok && data.success) {
+      return { success: true, bid: data.bid };
+    }
+    return { success: false, error: data.error || 'Failed to submit bid' };
+  } catch (err: any) {
+    console.error(`[CircleChain API] Failed to submit bid for circle #${payload.circle_id}:`, err);
+    return { success: false, error: err.message || 'Network error submitting bid' };
+  }
+}
+
 // 5. Record cycle contribution payment
 export async function recordContributionApi(payload: {
   circle_id: number;
