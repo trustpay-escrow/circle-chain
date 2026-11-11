@@ -395,16 +395,78 @@ export class SorobanEventIndexer {
 
   // 7. Default & Slashing Event Handler
   private async handleDefault(event: ParsedEvent) {
-    const [defaulter] = Array.isArray(event.data) ? event.data : [event.data?.defaulter];
+    const [defaulter, requiredContrib, currentCycle] = Array.isArray(event.data)
+      ? event.data
+      : [event.data?.defaulter, event.data?.required_contribution, event.data?.current_cycle];
 
     if (defaulter) {
+      const contribDecimal = Number(requiredContrib || 0) / 10_000_000;
+      const cycleIdx = Number(currentCycle || 0);
+
+      // 1. Record covered contribution in database if not already present
+      const existing = await prisma.contribution.findFirst({
+        where: {
+          circle_id: event.circleId,
+          cycle_index: cycleIdx,
+          member_address: String(defaulter)
+        }
+      });
+
+      if (existing) {
+        await prisma.contribution.update({
+          where: { id: existing.id },
+          data: { status: 'slashed_covered', tx_hash: event.txHash }
+        });
+      } else {
+        await prisma.contribution.create({
+          data: {
+            circle_id: event.circleId,
+            cycle_index: cycleIdx,
+            member_address: String(defaulter),
+            amount: contribDecimal,
+            status: 'slashed_covered',
+            tx_hash: event.txHash
+          }
+        });
+      }
+
+      // 2. Liquidate staked collateral in circle
+      await prisma.circleMember.updateMany({
+        where: {
+          circle_id: event.circleId,
+          wallet_address: String(defaulter)
+        },
+        data: {
+          collateral_staked: 0
+        }
+      });
+
+      // 3. Reset user profile reputation
+      await prisma.userProfile.updateMany({
+        where: { wallet_address: String(defaulter) },
+        data: {
+          reputation_score: 0
+        }
+      });
+
+      // 4. Log reputation penalty
       await prisma.reputationLog.create({
         data: {
           wallet_address: String(defaulter),
           circle_id: event.circleId,
           event_type: 'collateral_slashed',
-          score_change: -25,
-          reason: `Defaulted on cycle deposit; collateral liquidated into pool on-chain.`
+          score_change: -90,
+          reason: `Defaulted on Cycle #${cycleIdx + 1} deposit; collateral liquidated into pool on-chain.`
+        }
+      });
+
+      // 5. Create notification
+      await prisma.notification.create({
+        data: {
+          wallet_address: String(defaulter),
+          circle_id: event.circleId,
+          message: `Your collateral was liquidated into the pot due to missing the contribution deadline on-chain.`,
+          notification_type: 'slashed'
         }
       });
     }

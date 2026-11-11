@@ -32,6 +32,7 @@ import {
   recordContributionApi,
   releasePayoutApi,
   submitBidApi,
+  slashDefaulterApi,
   CircleData,
   ContributionData
 } from '../../../lib/api';
@@ -43,6 +44,7 @@ import {
   invokeContribute,
   invokeSubmitBid,
   invokeReleasePayout,
+  invokeHandleDefault,
   invokeWithdrawCollateral,
   CONTRACT_ID
 } from '../../../lib/soroban';
@@ -187,16 +189,28 @@ export default function CircleDetailPage() {
     circle.status === 'Forming' && createdAtMs > 0 && Date.now() - createdAtMs > 7 * 86400 * 1000;
   const isCircleFull = membersList.length >= memberCount;
   const currentCyclePaid = contributions.filter(
-    (c) => Number(c.cycle_index) === currentCycle && c.status === 'paid'
+    (c) =>
+      Number(c.cycle_index) === currentCycle &&
+      (c.status === 'paid' || c.status === 'slashed_covered')
   );
   const hasPaidCurrentCycle = address
     ? contributions.some(
         (c) =>
           Number(c.cycle_index) === currentCycle &&
           c.member_address.toLowerCase() === address.toLowerCase() &&
-          c.status === 'paid'
+          (c.status === 'paid' || c.status === 'slashed_covered')
       )
     : false;
+
+  // Delinquent members for current cycle (unpaid and eligible for default slashing if grace period expired)
+  const unpaidMembersForCurrentCycle = membersList.filter((mAddr) => {
+    return !contributions.some(
+      (c) =>
+        Number(c.cycle_index) === currentCycle &&
+        c.member_address.toLowerCase() === mAddr.toLowerCase() &&
+        (c.status === 'paid' || c.status === 'slashed_covered')
+    );
+  });
 
   const currentCyclePot = currentCyclePaid.length * circle.contribution_amount;
   const targetPot = memberCount * circle.contribution_amount;
@@ -555,6 +569,61 @@ export default function CircleDetailPage() {
       }
     } catch (err: any) {
       toast.error('Error placing bid', { description: err.message });
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  // 8. Slash Defaulter Action (On-Chain Soroban + Backend sync)
+  const handleSlashDefaulter = async (defaulterAddress: string) => {
+    if (!address) {
+      openModal();
+      return;
+    }
+
+    setIsActionLoading(true);
+    try {
+      toast.info('Initiating On-Chain Collateral Slashing...', {
+        description: `Seizing defaulter's staked collateral to cover the $${circle.contribution_amount} USDC pot deficit.`
+      });
+
+      let txHash = '';
+      try {
+        const onChainRes = await invokeHandleDefault(
+          Number(circle.circle_id),
+          defaulterAddress,
+          address,
+          {
+            signTransaction,
+            signAndSubmitTx
+          }
+        );
+        txHash = onChainRes.txHash;
+        setLastTxHash(txHash);
+      } catch (onChainErr: any) {
+        console.warn('[Soroban] On-chain slash notice:', onChainErr);
+      }
+
+      const res = await slashDefaulterApi({
+        circle_id: Number(circle.circle_id),
+        defaulter_address: defaulterAddress,
+        cycle_index: currentCycle,
+        caller_address: address,
+        tx_hash: txHash
+      });
+
+      if (res.success) {
+        toast.success('Defaulter Slashed & Pot Funded!', {
+          description: txHash
+            ? `Collateral liquidated on-chain. Tx: ${txHash.slice(0, 8)}...`
+            : `Deficit covered from collateral. Cycle #${currentCycle + 1} pot is now fully funded!`
+        });
+        await loadCircle();
+      } else {
+        toast.error('Failed to record slash liquidation', { description: res.error });
+      }
+    } catch (err: any) {
+      toast.error('Error during collateral slashing', { description: err.message });
     } finally {
       setIsActionLoading(false);
     }
@@ -985,6 +1054,75 @@ export default function CircleDetailPage() {
                 </Button>
               </div>
             )}
+          </div>
+        </Card>
+      )}
+
+      {/* Active Collateral Slashing & Deficit Liquidation Panel */}
+      {circle.status === 'Active' && timeLeft.isExpired && unpaidMembersForCurrentCycle.length > 0 && (
+        <Card className="p-6 bg-gradient-to-r from-slate-900 via-rose-950/20 to-slate-900 border-rose-500/40 shadow-xl space-y-4">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center space-x-3">
+              <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="flex items-center space-x-2">
+                  <h3 className="text-lg font-bold text-white">
+                    Cycle #{currentCycle + 1} Collateral Slashing Active
+                  </h3>
+                  <Badge variant="destructive" className="text-xs">
+                    Grace Period Expired
+                  </Badge>
+                </div>
+                <p className="text-xs text-slate-400 max-w-xl mt-1">
+                  The 24h grace period has elapsed. Delinquent members have forfeited their staked collateral under Soroban smart contract rules. Any member can trigger on-chain liquidation to seize the defaulter's collateral and cover the missing pot deficit, allowing the round payout to proceed!
+                </p>
+              </div>
+            </div>
+
+            <div className="text-right">
+              <span className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Defaulters Pending Slash</span>
+              <p className="text-2xl font-bold font-mono text-rose-400">{unpaidMembersForCurrentCycle.length}</p>
+            </div>
+          </div>
+
+          <div className="border-t border-slate-800 pt-3 divide-y divide-slate-800">
+            {unpaidMembersForCurrentCycle.map((defaulterAddr) => {
+              const defaulterMember = circle.members?.find(
+                (m) => m.wallet_address.toLowerCase() === defaulterAddr.toLowerCase()
+              );
+              const collateralAvailable = defaulterMember?.collateral_staked || circle.collateral_required;
+
+              return (
+                <div key={defaulterAddr} className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm">
+                  <div>
+                    <div className="font-mono text-xs text-rose-300 font-semibold flex items-center space-x-2">
+                      <span>{defaulterAddr.slice(0, 8)}...{defaulterAddr.slice(-6)}</span>
+                      <Badge variant="destructive" className="text-[10px]">Delinquent Member</Badge>
+                    </div>
+                    <span className="text-[11px] text-slate-400">
+                      Owed Deposit: ${circle.contribution_amount} USDC · Available Staked Collateral: ${collateralAvailable} USDC
+                    </span>
+                  </div>
+
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    disabled={isActionLoading || !address}
+                    onClick={() => handleSlashDefaulter(defaulterAddr)}
+                    className="self-start sm:self-auto"
+                  >
+                    {isActionLoading ? (
+                      <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                    ) : (
+                      <Shield className="w-3.5 h-3.5 mr-1.5" />
+                    )}
+                    <span>Slash & Liquidate ${circle.contribution_amount} USDC Deficit</span>
+                  </Button>
+                </div>
+              );
+            })}
           </div>
         </Card>
       )}

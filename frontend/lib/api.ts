@@ -133,6 +133,16 @@ export interface UserProfileData {
   total_collateral_staked?: number;
 }
 
+export interface NotificationData {
+  id: string;
+  wallet_address: string;
+  circle_id: number | string;
+  message: string;
+  notification_type: string;
+  is_read: boolean;
+  created_at: string;
+}
+
 // 1. Fetch all savings circles from Prisma backend
 export async function fetchCircles(): Promise<CircleData[]> {
   try {
@@ -314,6 +324,36 @@ export async function submitBidApi(payload: {
   }
 }
 
+// 4b. Slash defaulter collateral and liquidate deficit into circle pot
+export async function slashDefaulterApi(payload: {
+  circle_id: number;
+  defaulter_address: string;
+  cycle_index: number;
+  caller_address: string;
+  tx_hash?: string;
+}): Promise<{ success: boolean; result?: any; error?: string }> {
+  try {
+    const token = getAuthToken(payload.caller_address);
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const res = await fetch(`${BACKEND_URL}/api/circles/${payload.circle_id}/slash`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload)
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.success) {
+      return { success: true, result: data.result };
+    }
+    return { success: false, error: data.error || 'Failed to record collateral slashing' };
+  } catch (err: any) {
+    console.error(`[CircleChain API] Failed to slash defaulter in circle #${payload.circle_id}:`, err);
+    return { success: false, error: err.message || 'Network error executing slashing' };
+  }
+}
+
 // 5. Record cycle contribution payment
 export async function recordContributionApi(payload: {
   circle_id: number;
@@ -442,4 +482,50 @@ export async function saveUserProfileApi(profileData: UserProfileData): Promise<
   }
 
   return profileData;
+}
+
+// 10. Fetch User Notifications from Backend
+export async function fetchNotificationsApi(walletAddress: string): Promise<NotificationData[]> {
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/notifications/${walletAddress}`, {
+      cache: 'no-store'
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.notifications && Array.isArray(data.notifications)) {
+        return data.notifications;
+      }
+    }
+  } catch (err) {
+    console.error(`[CircleChain API] Failed to fetch notifications for ${walletAddress}:`, err);
+  }
+  return [];
+}
+
+// 11. Mark Single Notification as Read
+export async function markNotificationReadApi(id: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/notifications/${id}/read`, {
+      method: 'PATCH'
+    });
+    return res.ok;
+  } catch (err) {
+    console.error(`[CircleChain API] Failed to mark notification ${id} as read:`, err);
+    return false;
+  }
+}
+
+// 12. Mark All Notifications as Read for Wallet
+export async function markAllNotificationsReadApi(walletAddress: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/notifications/read-all`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ wallet: walletAddress })
+    });
+    return res.ok;
+  } catch (err) {
+    console.error(`[CircleChain API] Failed to mark all notifications as read for ${walletAddress}:`, err);
+    return false;
+  }
 }

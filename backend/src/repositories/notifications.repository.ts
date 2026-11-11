@@ -49,6 +49,21 @@ export class NotificationsRepository {
       select: { wallet_address: true }
     });
   }
+
+  async markAsRead(id: string) {
+    const updated = await prisma.notification.update({
+      where: { id },
+      data: { is_read: true }
+    });
+    return serializeData(updated);
+  }
+
+  async markAllAsRead(wallet: string) {
+    return prisma.notification.updateMany({
+      where: { wallet_address: wallet, is_read: false },
+      data: { is_read: true }
+    });
+  }
 }
 
 export const notificationsRepository = new NotificationsRepository();
