@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useWallet } from '../lib/wallet-context';
 import { Button } from './ui/button';
 import { LogOut, User, PlusCircle, Compass } from 'lucide-react';
+import { NotificationsPopover } from './notifications-popover';
 
 export function Navbar() {
   const { address, isConnecting, openModal, disconnect } = useWallet();
@@ -38,8 +39,10 @@ export function Navbar() {
           </Link>
         </div>
 
-        {/* Connect / Disconnect Wallet Buttons */}
-        <div className="flex items-center space-x-2">
+        {/* Connect / Disconnect Wallet Buttons & Notifications */}
+        <div className="flex items-center space-x-3">
+          {address && <NotificationsPopover />}
+
           {address ? (
             <div className="flex items-center space-x-2 bg-slate-900 border border-slate-800 rounded-full px-3 py-1 text-xs">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />

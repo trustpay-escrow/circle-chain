@@ -45,4 +45,25 @@ export const notificationsRoutes: FastifyPluginAsync = async (server: FastifyIns
       };
     }
   );
+
+  // PATCH /api/notifications/:id/read
+  server.patch<{ Params: { id: string } }>('/:id/read', async (req, reply) => {
+    const updated = await notificationsService.markAsRead(req.params.id);
+    return { success: true, notification: updated };
+  });
+
+  // POST /api/notifications/read-all
+  server.post<{ Body: { wallet: string } }>('/read-all', async (req, reply) => {
+    const { wallet } = req.body || {};
+    if (!wallet) {
+      return reply.status(400).send({
+        success: false,
+        statusCode: 400,
+        reqId: req.id,
+        error: 'wallet is required'
+      });
+    }
+    const result = await notificationsService.markAllAsRead(wallet);
+    return { success: true, updatedCount: result.count };
+  });
 };

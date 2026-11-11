@@ -1,6 +1,6 @@
 'use client';
 
-import { CheckCircle2, XCircle, Clock, AlertTriangle } from 'lucide-react';
+import { CheckCircle2, XCircle, Clock, AlertTriangle, Shield } from 'lucide-react';
 import { CycleContributionStatus } from '../lib/types';
 
 interface ContributionGridProps {
@@ -17,6 +17,18 @@ export function ContributionGrid({ memberCount, currentCycle, members, contribut
       const cIdx = c.cycle_index !== undefined ? c.cycle_index : c.cycleIndex;
       const paid = c.status === 'paid' || c.hasPaid === true;
       return addr.toLowerCase() === memberAddress.toLowerCase() && cIdx === cycleIndex && paid;
+    });
+  };
+
+  const isSlashed = (memberAddress: string, cycleIndex: number) => {
+    return contributions.some((c: any) => {
+      const addr = c.member_address || c.memberAddress || '';
+      const cIdx = c.cycle_index !== undefined ? c.cycle_index : c.cycleIndex;
+      return (
+        addr.toLowerCase() === memberAddress.toLowerCase() &&
+        cIdx === cycleIndex &&
+        c.status === 'slashed_covered'
+      );
     });
   };
 
@@ -38,6 +50,7 @@ export function ContributionGrid({ memberCount, currentCycle, members, contribut
         </div>
         <div className="flex flex-wrap items-center gap-3 text-xs">
           <span className="flex items-center text-emerald-400"><CheckCircle2 className="w-4 h-4 mr-1 shrink-0" /> Paid</span>
+          <span className="flex items-center text-purple-400"><Shield className="w-4 h-4 mr-1 shrink-0" /> Slashed / Covered</span>
           <span className="flex items-center text-amber-400"><Clock className="w-4 h-4 mr-1 shrink-0" /> Current Cycle</span>
           <span className="flex items-center text-rose-400"><AlertTriangle className="w-4 h-4 mr-1 shrink-0" /> Defaulted</span>
           <span className="flex items-center text-slate-500"><XCircle className="w-4 h-4 mr-1 shrink-0" /> Pending</span>
@@ -71,12 +84,17 @@ export function ContributionGrid({ memberCount, currentCycle, members, contribut
                   </td>
                   {Array.from({ length: Math.max(memberCount, 1) }).map((_, cIdx) => {
                     const paid = isPaid(addr, cIdx);
+                    const slashed = isSlashed(addr, cIdx);
                     const defaulted = isDefaulted(addr, cIdx);
                     const isCurrent = cIdx === currentCycle;
 
                     return (
                       <td key={cIdx} className="py-3 px-4 text-center">
-                        {paid ? (
+                        {slashed ? (
+                          <span title="Defaulted & Slashed: Pot deficit covered by liquidated collateral">
+                            <Shield className="w-5 h-5 text-purple-400 inline-block" />
+                          </span>
+                        ) : paid ? (
                           <span title="Paid on-chain">
                             <CheckCircle2 className="w-5 h-5 text-emerald-400 inline-block" />
                           </span>

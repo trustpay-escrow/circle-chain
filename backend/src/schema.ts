@@ -168,6 +168,38 @@ export const CreateContributionSchema: FastifySchema = {
   }
 };
 
+export const SlashDefaulterSchema: FastifySchema = {
+  description: 'Record on-chain collateral slashing and pot deficit liquidation',
+  tags: ['Circles'],
+  params: {
+    type: 'object',
+    required: ['id'],
+    properties: {
+      id: { type: 'string', pattern: '^[0-9]+$' }
+    }
+  },
+  body: {
+    type: 'object',
+    required: ['defaulter_address', 'cycle_index'],
+    properties: {
+      defaulter_address: { type: 'string', minLength: 56, maxLength: 64 },
+      cycle_index: { type: 'number', minimum: 0 },
+      caller_address: { type: 'string', minLength: 56, maxLength: 64 },
+      tx_hash: { type: 'string' }
+    }
+  },
+  response: {
+    200: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean' },
+        result: { type: 'object', additionalProperties: true }
+      }
+    },
+    400: ErrorResponseSchema
+  }
+};
+
 export const RecordPayoutSchema: FastifySchema = {
   description: 'Record pot payout release execution',
   tags: ['Contributions'],

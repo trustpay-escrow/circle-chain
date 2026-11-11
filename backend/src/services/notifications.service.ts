@@ -25,6 +25,14 @@ export class NotificationsService {
     await notificationsRepository.createBatch(items);
     return { count: items.length };
   }
+
+  async markAsRead(id: string) {
+    return notificationsRepository.markAsRead(id);
+  }
+
+  async markAllAsRead(wallet: string) {
+    return notificationsRepository.markAllAsRead(wallet);
+  }
 }
 
 export const notificationsService = new NotificationsService();

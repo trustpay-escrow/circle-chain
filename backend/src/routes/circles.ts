@@ -1,6 +1,6 @@
 import { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import { circlesService } from '../services/circles.service';
-import { CreateCircleSchema, GetCircleByIdSchema, JoinCircleSchema } from '../schema';
+import { CreateCircleSchema, GetCircleByIdSchema, JoinCircleSchema, SlashDefaulterSchema } from '../schema';
 import { CreateCircleDto } from '../repositories/circles.repository';
 import { requireAuth } from '../lib/stellar-auth';
 
@@ -156,6 +156,45 @@ export const circlesRoutes: FastifyPluginAsync = async (server: FastifyInstance)
           submitted_at: new Date().toISOString()
         }
       };
+    }
+  );
+
+  // POST /api/circles/:id/slash (Guarded by SEP-10 Wallet Authentication)
+  server.post<{
+    Params: { id: string };
+    Body: { defaulter_address: string; cycle_index: number; caller_address?: string; tx_hash?: string };
+  }>(
+    '/:id/slash',
+    { schema: SlashDefaulterSchema, preHandler: [requireAuth] },
+    async (req, reply) => {
+      const circleId = parseInt(req.params.id, 10);
+      const caller = req.user?.address || req.body.caller_address;
+      if (!caller) {
+        return reply.status(401).send({
+          success: false,
+          statusCode: 401,
+          reqId: req.id,
+          error: 'Unauthorized'
+        });
+      }
+
+      try {
+        const result = await circlesService.slashDefaulter(
+          circleId,
+          req.body.defaulter_address,
+          req.body.cycle_index,
+          caller,
+          req.body.tx_hash
+        );
+        return { success: true, result };
+      } catch (err: any) {
+        return reply.status(400).send({
+          success: false,
+          statusCode: 400,
+          reqId: req.id,
+          error: err.message || 'Failed to process collateral slashing'
+        });
+      }
     }
   );
 };

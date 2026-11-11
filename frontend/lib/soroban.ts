@@ -227,6 +227,39 @@ export async function invokeReleasePayout(
 }
 
 /**
+ * Invokes handle_default on the Soroban smart contract
+ * Slashes defaulter's collateral and liquidates deficit directly into current cycle pot
+ */
+export async function invokeHandleDefault(
+  circleId: number,
+  defaulterAddress: string,
+  callerAddress: string,
+  signer?: SorobanSigner
+): Promise<{ success: boolean; txHash: string }> {
+  const server = getSorobanServer();
+  const account = await getAccount(callerAddress);
+  const contract = new StellarSdk.Contract(CONTRACT_ID);
+
+  const tx = new StellarSdk.TransactionBuilder(account, {
+    fee: BASE_FEE,
+    networkPassphrase: NETWORK_PASSPHRASE
+  })
+    .addOperation(
+      contract.call(
+        'handle_default',
+        StellarSdk.nativeToScVal(BigInt(circleId), { type: 'u64' }),
+        new StellarSdk.Address(defaulterAddress).toScVal()
+      )
+    )
+    .setTimeout(60)
+    .build();
+
+  const preparedTx = await server.prepareTransaction(tx);
+  const txHash = await signAndSubmit(preparedTx.toXDR(), signer);
+  return { success: true, txHash };
+}
+
+/**
  * Invokes emergency_unwind on the Soroban smart contract
  * Transitions defaulted or stalled circle to Terminated state
  */

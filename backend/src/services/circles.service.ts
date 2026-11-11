@@ -72,6 +72,36 @@ export class CirclesService {
 
     return circlesRepository.cancelCircle(circleId);
   }
+
+  async slashDefaulter(
+    circleId: number,
+    defaulterAddress: string,
+    cycleIndex: number,
+    callerAddress: string,
+    txHash?: string
+  ) {
+    if (!isValidStellarPublicKey(defaulterAddress)) {
+      throw new Error(`Invalid Stellar defaulter address format: ${defaulterAddress}`);
+    }
+
+    const circle = await circlesRepository.findById(circleId);
+    if (!circle) {
+      throw new Error(`Circle #${circleId} not found`);
+    }
+
+    if (circle.status !== 'Active') {
+      throw new Error(`Circle #${circleId} is not Active (status: ${circle.status})`);
+    }
+
+    return circlesRepository.slashDefaulter(
+      circleId,
+      defaulterAddress,
+      cycleIndex,
+      Number(circle.contribution_amount),
+      callerAddress,
+      txHash
+    );
+  }
 }
 
 export const circlesService = new CirclesService();

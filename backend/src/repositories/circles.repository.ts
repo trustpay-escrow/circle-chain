@@ -104,6 +104,67 @@ export class CirclesRepository {
     });
     return serializeData(updated);
   }
+
+  async slashDefaulter(
+    circleId: bigint | number,
+    defaulterAddress: string,
+    cycleIndex: number,
+    amount: number,
+    callerAddress: string,
+    txHash?: string
+  ) {
+    // 1. Create contribution covered by liquidated collateral
+    await prisma.contribution.create({
+      data: {
+        circle_id: BigInt(circleId),
+        cycle_index: cycleIndex,
+        member_address: defaulterAddress,
+        amount: Number(amount),
+        status: 'slashed_covered',
+        tx_hash: txHash || null
+      }
+    });
+
+    // 2. Liquidate defaulter collateral staked to 0
+    await prisma.circleMember.updateMany({
+      where: {
+        circle_id: BigInt(circleId),
+        wallet_address: defaulterAddress
+      },
+      data: {
+        collateral_staked: 0
+      }
+    });
+
+    // 3. Reset defaulter reputation
+    await prisma.userProfile.updateMany({
+      where: { wallet_address: defaulterAddress },
+      data: { reputation_score: 0 }
+    });
+
+    // 4. Log reputation penalty
+    await prisma.reputationLog.create({
+      data: {
+        wallet_address: defaulterAddress,
+        circle_id: BigInt(circleId),
+        event_type: 'collateral_slashed',
+        score_change: -90,
+        reason: `Defaulted on Cycle #${cycleIndex + 1} deposit. Collateral liquidated into communal pot by ${callerAddress}.`
+      }
+    });
+
+    // 5. Send notification
+    await prisma.notification.create({
+      data: {
+        wallet_address: defaulterAddress,
+        circle_id: BigInt(circleId),
+        message: `Your staked collateral was liquidated on-chain into the pot due to default on Cycle #${cycleIndex + 1}.`,
+        notification_type: 'slashed'
+      }
+    });
+
+    return { circleId: Number(circleId), defaulter: defaulterAddress, status: 'slashed_covered' };
+  }
 }
 
 export const circlesRepository = new CirclesRepository();
