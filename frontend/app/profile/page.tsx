@@ -1,9 +1,36 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Award, ShieldCheck, CheckCircle2, History, Loader2, User, Edit3, Save, X, Wallet } from 'lucide-react';
+import Link from 'next/link';
+import {
+  Award,
+  ShieldCheck,
+  CheckCircle2,
+  History,
+  Loader2,
+  User,
+  Edit3,
+  Save,
+  X,
+  Wallet,
+  Coins,
+  Clock,
+  Shield,
+  ArrowUpRight,
+  AlertTriangle,
+  Sparkles,
+  TrendingUp,
+  UserCheck
+} from 'lucide-react';
 import { toast } from 'sonner';
-import { fetchUserProfileApi, saveUserProfileApi, UserProfileData } from '../../lib/api';
+import {
+  fetchUserProfileApi,
+  saveUserProfileApi,
+  fetchCircles,
+  UserProfileData,
+  CircleData,
+  ReputationLogData
+} from '../../lib/api';
 import { useWallet } from '../../lib/wallet-context';
 import { Badge } from '../../components/ui/badge';
 import { Input } from '../../components/ui/input';
@@ -13,6 +40,8 @@ import { Button } from '../../components/ui/button';
 export default function ProfilePage() {
   const { address, openModal } = useWallet();
   const [profile, setProfile] = useState<UserProfileData | null>(null);
+  const [userCircles, setUserCircles] = useState<CircleData[]>([]);
+  const [activeTab, setActiveTab] = useState<'circles' | 'reputation'>('circles');
   const [isLoading, setIsLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -25,21 +54,40 @@ export default function ProfilePage() {
   useEffect(() => {
     if (!address) {
       setProfile(null);
+      setUserCircles([]);
       return;
     }
 
-    async function loadProfile() {
+    async function loadProfileAndCircles() {
       setIsLoading(true);
-      const data = await fetchUserProfileApi(address!);
-      setProfile(data);
-      if (data) {
-        setUsernameInput(data.username || '');
-        setDisplayNameInput(data.display_name || '');
-        setBioInput(data.bio || '');
+      try {
+        const [profileData, allCircles] = await Promise.all([
+          fetchUserProfileApi(address!),
+          fetchCircles()
+        ]);
+
+        setProfile(profileData);
+        if (profileData) {
+          setUsernameInput(profileData.username || '');
+          setDisplayNameInput(profileData.display_name || '');
+          setBioInput(profileData.bio || '');
+        }
+
+        // Filter circles where connected address is member or creator
+        const userAddr = address!.toLowerCase();
+        const my = allCircles.filter(
+          (c) =>
+            c.creator_address.toLowerCase() === userAddr ||
+            c.members?.some((m) => m.wallet_address.toLowerCase() === userAddr)
+        );
+        setUserCircles(my);
+      } catch (err) {
+        console.error('Failed to load profile data:', err);
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     }
-    loadProfile();
+    loadProfileAndCircles();
   }, [address]);
 
   const handleSaveProfile = async (e: React.FormEvent) => {
@@ -254,6 +302,235 @@ export default function ProfilePage() {
           <p className="text-xs text-slate-400">Staked across active circles</p>
         </Card>
       </div>
+
+      {/* Tab Switcher: My Savings Circles vs Reputation Ledger */}
+      <div className="flex items-center space-x-2 border-b border-slate-800 pb-2">
+        <button
+          onClick={() => setActiveTab('circles')}
+          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${
+            activeTab === 'circles'
+              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+          }`}
+        >
+          <Coins className="w-4 h-4" />
+          <span>My Savings Circles</span>
+          <span className="px-2 py-0.5 text-xs bg-slate-800 text-slate-300 rounded-full font-mono">
+            {userCircles.length}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('reputation')}
+          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${
+            activeTab === 'reputation'
+              ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+          }`}
+        >
+          <Award className="w-4 h-4" />
+          <span>On-Chain Reputation Ledger</span>
+          <span className="px-2 py-0.5 text-xs bg-slate-800 text-slate-300 rounded-full font-mono">
+            {profile?.reputation_logs?.length || 0}
+          </span>
+        </button>
+      </div>
+
+      {/* Tab 1 Content: My Savings Circles */}
+      {activeTab === 'circles' ? (
+        userCircles.length === 0 ? (
+          <Card className="p-10 text-center space-y-4 border-dashed border-slate-800">
+            <div className="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center mx-auto text-xl">
+              ⭕
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-lg font-bold text-white">No Savings Circles Yet</h3>
+              <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                You are not currently enrolled in any ROSCA savings pools. Explore open groups to stake collateral and begin rotating savings.
+              </p>
+            </div>
+            <div className="flex items-center justify-center space-x-3 pt-2">
+              <Link href="/circles">
+                <Button variant="outline" size="sm">Explore Open Circles</Button>
+              </Link>
+              <Link href="/circles/create">
+                <Button variant="gradient" size="sm">Create New Circle</Button>
+              </Link>
+            </div>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {userCircles.map((circle) => {
+              const isCreator = circle.creator_address.toLowerCase() === address.toLowerCase();
+              const myMember = circle.members?.find(
+                (m) => m.wallet_address.toLowerCase() === address.toLowerCase()
+              );
+              const turnIdx = myMember?.payout_order_index;
+
+              return (
+                <Card
+                  key={circle.circle_id}
+                  className="p-6 space-y-4 flex flex-col justify-between hover:border-slate-700 transition-colors relative"
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between">
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <Badge
+                            variant={
+                              circle.status === 'Active'
+                                ? 'default'
+                                : circle.status === 'Forming'
+                                ? 'warning'
+                                : circle.status === 'Completed'
+                                ? 'purple'
+                                : 'destructive'
+                            }
+                          >
+                            {circle.status}
+                          </Badge>
+                          {isCreator && (
+                            <Badge variant="purple" className="text-[10px]">
+                              Creator
+                            </Badge>
+                          )}
+                          {turnIdx !== undefined && turnIdx !== null && (
+                            <Badge variant="outline" className="text-[10px]">
+                              Turn #{turnIdx + 1}
+                            </Badge>
+                          )}
+                        </div>
+                        <h3 className="text-lg font-bold text-white">{circle.name}</h3>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-xl font-bold text-white">${circle.contribution_amount}</span>
+                        <span className="text-[11px] text-slate-400 block">USDC / Cycle</span>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-slate-400 line-clamp-2">
+                      {circle.description || 'On-chain rotating savings circle'}
+                    </p>
+                  </div>
+
+                  <div className="space-y-3 pt-2 border-t border-slate-800 text-xs">
+                    <div className="flex items-center justify-between text-slate-400">
+                      <span>Circle Size:</span>
+                      <span className="text-white font-mono">{circle.members?.length || 1} / {circle.member_count} Members</span>
+                    </div>
+                    <div className="flex items-center justify-between text-slate-400">
+                      <span>Staked Security Deposit:</span>
+                      <span className="text-emerald-400 font-mono">${myMember?.collateral_staked ?? circle.collateral_required} USDC</span>
+                    </div>
+                    <div className="flex items-center justify-between text-slate-400">
+                      <span>Turn Payout Status:</span>
+                      <span className="font-semibold text-white">
+                        {myMember?.payout_received ? '✅ Payout Collected' : '⏳ Pending Cycle'}
+                      </span>
+                    </div>
+
+                    <Link href={`/circles/${circle.circle_id}`} className="block pt-2">
+                      <Button variant="outline" size="sm" className="w-full text-xs">
+                        Open Circle Dashboard
+                        <ArrowUpRight className="w-3.5 h-3.5 ml-1" />
+                      </Button>
+                    </Link>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        )
+      ) : (
+        /* Tab 2 Content: On-Chain Reputation & Audit Ledger */
+        <Card className="p-6 space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div>
+              <h3 className="text-lg font-bold text-white flex items-center space-x-2">
+                <ShieldCheck className="w-5 h-5 text-purple-400" />
+                <span>On-Chain Credit & Reputation History</span>
+              </h3>
+              <p className="text-xs text-slate-400">
+                Transparent cryptographic record of verified savings punctuality and circle completions
+              </p>
+            </div>
+            <Badge variant="default" className="font-mono">
+              Score: {user.reputation_score ?? 100} / 100
+            </Badge>
+          </div>
+
+          {!profile?.reputation_logs || profile.reputation_logs.length === 0 ? (
+            <div className="py-10 text-center space-y-2">
+              <Sparkles className="w-8 h-8 text-slate-600 mx-auto" />
+              <p className="text-sm text-slate-400">No reputation events recorded yet.</p>
+              <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                Punctual cycle contributions (+5 pts) and successful circle completions (+20 pts) are automatically indexed here.
+              </p>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-800">
+              {profile.reputation_logs.map((log) => {
+                const isPositive = log.score_change >= 0;
+                const formattedDate = log.created_at
+                  ? new Date(log.created_at).toLocaleDateString(undefined, {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })
+                  : 'Recent';
+
+                return (
+                  <div key={log.id} className="py-3.5 flex items-center justify-between gap-4 text-xs">
+                    <div className="flex items-start space-x-3">
+                      <div
+                        className={`p-2 rounded-xl shrink-0 mt-0.5 ${
+                          isPositive
+                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                            : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                        }`}
+                      >
+                        {isPositive ? (
+                          <CheckCircle2 className="w-4 h-4" />
+                        ) : (
+                          <AlertTriangle className="w-4 h-4" />
+                        )}
+                      </div>
+                      <div className="space-y-0.5">
+                        <div className="flex items-center space-x-2">
+                          <span className="font-semibold text-white">
+                            {log.event_type.replace(/_/g, ' ').toUpperCase()}
+                          </span>
+                          {log.circle_id && (
+                            <Link
+                              href={`/circles/${log.circle_id}`}
+                              className="text-emerald-400 hover:underline font-mono"
+                            >
+                              Circle #{String(log.circle_id)}
+                            </Link>
+                          )}
+                        </div>
+                        <p className="text-slate-400">{log.reason}</p>
+                      </div>
+                    </div>
+
+                    <div className="text-right shrink-0 space-y-1">
+                      <Badge
+                        variant={isPositive ? 'success' : 'destructive'}
+                        className="font-mono text-xs font-bold"
+                      >
+                        {isPositive ? `+${log.score_change}` : log.score_change} pts
+                      </Badge>
+                      <span className="text-[10px] text-slate-500 block">{formattedDate}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+      )}
     </div>
   );
 }

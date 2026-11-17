@@ -29,6 +29,7 @@ import {
   joinCircleApi,
   leaveCircleApi,
   cancelCircleApi,
+  unwindCircleApi,
   recordContributionApi,
   releasePayoutApi,
   submitBidApi,
@@ -45,6 +46,7 @@ import {
   invokeSubmitBid,
   invokeReleasePayout,
   invokeHandleDefault,
+  invokeEmergencyUnwind,
   invokeWithdrawCollateral,
   CONTRACT_ID
 } from '../../../lib/soroban';
@@ -629,6 +631,49 @@ export default function CircleDetailPage() {
     }
   };
 
+  // 9. Emergency Unwind Action (Defaulted state - On-Chain Soroban + Backend sync)
+  const handleEmergencyUnwind = async () => {
+    if (!address) {
+      openModal();
+      return;
+    }
+
+    setIsActionLoading(true);
+    try {
+      toast.info('Initiating Emergency Unwind...', {
+        description: 'Transitioning defaulted circle to Terminated so members can withdraw remaining collateral.'
+      });
+
+      let txHash = '';
+      try {
+        const onChainRes = await invokeEmergencyUnwind(Number(circle.circle_id), address, {
+          signTransaction,
+          signAndSubmitTx
+        });
+        txHash = onChainRes.txHash;
+        setLastTxHash(txHash);
+      } catch (onChainErr: any) {
+        console.warn('[Soroban] On-chain unwind notice:', onChainErr);
+      }
+
+      const res = await unwindCircleApi(Number(circle.circle_id), address);
+      if (res.success) {
+        toast.success('Circle Unwound Successfully', {
+          description: txHash
+            ? `On-chain emergency unwind executed. Tx: ${txHash.slice(0, 8)}...`
+            : 'Circle terminated. Staked collateral and unreleased funds are now withdrawable.'
+        });
+        await loadCircle();
+      } else {
+        toast.error('Failed to emergency unwind circle', { description: res.error });
+      }
+    } catch (err: any) {
+      toast.error('Error during emergency unwind', { description: err.message });
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-8 max-w-6xl mx-auto py-6">
       {/* Top Header & Breadcrumb */}
@@ -944,6 +989,28 @@ export default function CircleDetailPage() {
                   </Button>
                 )}
               </>
+            ) : circle.status === 'Defaulted' ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="destructive" className="px-3 py-1.5 text-xs">
+                  <AlertTriangle className="w-4 h-4 mr-1.5" />
+                  Circle Defaulted · Grace Period Expired
+                </Badge>
+                {isMember && (
+                  <Button
+                    variant="destructive"
+                    size="md"
+                    disabled={isActionLoading}
+                    onClick={handleEmergencyUnwind}
+                  >
+                    {isActionLoading ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <AlertTriangle className="w-4 h-4 mr-2" />
+                    )}
+                    <span>Emergency Unwind Circle</span>
+                  </Button>
+                )}
+              </div>
             ) : circle.status === 'Completed' || circle.status === 'Terminated' ? (
               isMember && (
                 <Button

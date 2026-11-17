@@ -105,6 +105,14 @@ export class CirclesRepository {
     return serializeData(updated);
   }
 
+  async unwindCircle(circleId: bigint | number) {
+    const updated = await prisma.circleMetadata.update({
+      where: { circle_id: BigInt(circleId) },
+      data: { status: 'Terminated' }
+    });
+    return serializeData(updated);
+  }
+
   async slashDefaulter(
     circleId: bigint | number,
     defaulterAddress: string,

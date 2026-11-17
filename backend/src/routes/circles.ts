@@ -118,6 +118,27 @@ export const circlesRoutes: FastifyPluginAsync = async (server: FastifyInstance)
     }
   );
 
+  // POST /api/circles/:id/unwind (Guarded by SEP-10 Wallet Authentication)
+  server.post<{ Params: { id: string } }>(
+    '/:id/unwind',
+    { preHandler: [requireAuth] },
+    async (req, reply) => {
+      const circleId = parseInt(req.params.id, 10);
+      const caller = req.user?.address;
+      if (!caller) {
+        return reply.status(401).send({
+          success: false,
+          statusCode: 401,
+          reqId: req.id,
+          error: 'Unauthorized'
+        });
+      }
+
+      const updated = await circlesService.unwindCircle(circleId);
+      return { success: true, circle: updated };
+    }
+  );
+
   // POST /api/circles/:id/bids (Guarded by SEP-10 Wallet Authentication)
   server.post<{
     Params: { id: string };
