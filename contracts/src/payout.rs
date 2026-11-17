@@ -211,3 +211,16 @@ pub fn check_and_release_payout(env: &Env, circle_id: u64) {
         (recipient, actual_payout, completed_cycle),
     );
 }
+
+pub fn get_cycle_contributions(env: &Env, circle_id: u64, cycle: u32) -> Vec<Address> {
+    let cycle_key = DataKey::CycleContributions(circle_id, cycle);
+    let contributions: Vec<Address> = env
+        .storage()
+        .persistent()
+        .get(&cycle_key)
+        .unwrap_or(Vec::new(env));
+    if env.storage().persistent().has(&cycle_key) {
+        env.storage().persistent().extend_ttl(&cycle_key, TTL_THRESHOLD, TTL_EXTEND_TO);
+    }
+    contributions
+}

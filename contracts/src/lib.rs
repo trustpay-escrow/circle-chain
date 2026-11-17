@@ -11,7 +11,7 @@ pub mod default_logic;
 pub mod test;
 
 use soroban_sdk::{contract, contractimpl, Env, Address, Vec};
-use types::{Circle, PayoutOrderMode};
+use types::{Circle, Member, PayoutOrderMode};
 
 #[contract]
 pub struct CircleChainContract;
@@ -102,5 +102,25 @@ impl CircleChainContract {
     /// Returns the current state of a circle
     pub fn get_circle_status(env: Env, circle_id: u64) -> Circle {
         circle::get_circle_status(&env, circle_id)
+    }
+
+    /// Returns the total number of circles created
+    pub fn get_circle_count(env: Env) -> u64 {
+        circle::get_circle_count(&env)
+    }
+
+    /// Returns member details for a specific circle, or None if not registered
+    pub fn get_member(env: Env, circle_id: u64, member: Address) -> Option<Member> {
+        member::get_member(&env, circle_id, member)
+    }
+
+    /// Returns the list of all member addresses that have joined a circle
+    pub fn get_circle_members(env: Env, circle_id: u64) -> Vec<Address> {
+        member::get_circle_members(&env, circle_id)
+    }
+
+    /// Returns the list of member addresses that have contributed for a specific cycle
+    pub fn get_cycle_contributions(env: Env, circle_id: u64, cycle: u32) -> Vec<Address> {
+        payout::get_cycle_contributions(&env, circle_id, cycle)
     }
 }

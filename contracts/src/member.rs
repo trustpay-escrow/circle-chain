@@ -157,3 +157,25 @@ pub fn leave_circle(env: &Env, circle_id: u64, member_address: Address) {
         (member_address, refund_amount, new_members.len()),
     );
 }
+
+pub fn get_member(env: &Env, circle_id: u64, member: Address) -> Option<Member> {
+    let member_key = DataKey::Member(circle_id, member);
+    let member_opt: Option<Member> = env.storage().persistent().get(&member_key);
+    if member_opt.is_some() {
+        env.storage().persistent().extend_ttl(&member_key, TTL_THRESHOLD, TTL_EXTEND_TO);
+    }
+    member_opt
+}
+
+pub fn get_circle_members(env: &Env, circle_id: u64) -> Vec<Address> {
+    let members_key = DataKey::CircleMembers(circle_id);
+    let members: Vec<Address> = env
+        .storage()
+        .persistent()
+        .get(&members_key)
+        .unwrap_or(Vec::new(env));
+    if env.storage().persistent().has(&members_key) {
+        env.storage().persistent().extend_ttl(&members_key, TTL_THRESHOLD, TTL_EXTEND_TO);
+    }
+    members
+}

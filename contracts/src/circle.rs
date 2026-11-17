@@ -69,6 +69,13 @@ pub fn get_circle_status(env: &Env, circle_id: u64) -> Circle {
     circle
 }
 
+pub fn get_circle_count(env: &Env) -> u64 {
+    env.storage()
+        .instance()
+        .get(&DataKey::CircleCount)
+        .unwrap_or(0)
+}
+
 /// Cancels an unfilled circle in Forming state.
 /// - The circle creator can cancel at any time.
 /// - Any joined member can trigger cancellation after the 7-day inactivity window (FORMING_EXPIRY_SECONDS).
