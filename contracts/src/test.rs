@@ -616,3 +616,80 @@ fn test_bid_based_auction_flow_with_dividends() {
     assert_eq!(status_completed.status, types::CircleStatus::Completed);
 }
 
+#[test]
+fn test_public_view_getters() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register_contract(None, CircleChainContract);
+    let client = CircleChainContractClient::new(&env, &contract_id);
+
+    // Initial circle count should be 0
+    assert_eq!(client.get_circle_count(), 0);
+
+    let creator = Address::generate(&env);
+    let user1 = Address::generate(&env);
+    let user2 = Address::generate(&env);
+    let non_member = Address::generate(&env);
+
+    let token_admin = Address::generate(&env);
+    let token_contract = env.register_stellar_asset_contract(token_admin);
+    let token_admin_client = token::StellarAssetClient::new(&env, &token_contract);
+
+    token_admin_client.mint(&user1, &1000);
+    token_admin_client.mint(&user2, &1000);
+
+    let payout_schedule = vec![&env, user1.clone(), user2.clone()];
+    let circle_id = client.create_circle(
+        &creator,
+        &token_contract,
+        &100,
+        &86400,
+        &2,
+        &50,
+        &payout_schedule,
+        &types::PayoutOrderMode::Fixed,
+    );
+
+    // 1. Verify get_circle_count increments
+    assert_eq!(client.get_circle_count(), 1);
+
+    // 2. Before anyone joins, circle_members should be empty and get_member returns None
+    assert_eq!(client.get_circle_members(&circle_id).len(), 0);
+    assert_eq!(client.get_member(&circle_id, &user1), None);
+    assert_eq!(client.get_member(&circle_id, &non_member), None);
+
+    // User1 joins
+    client.join_circle(&circle_id, &user1);
+
+    // 3. Verify get_circle_members and get_member after user1 joins
+    let members = client.get_circle_members(&circle_id);
+    assert_eq!(members.len(), 1);
+    assert_eq!(members.get(0).unwrap(), user1);
+
+    let u1_info = client.get_member(&circle_id, &user1).expect("user1 member exists");
+    assert_eq!(u1_info.address, user1);
+    assert_eq!(u1_info.collateral_deposited, 50);
+    assert_eq!(u1_info.has_received_payout, false);
+    assert_eq!(u1_info.reputation_score, 100);
+
+    // User2 joins -> Circle becomes Active
+    client.join_circle(&circle_id, &user2);
+    assert_eq!(client.get_circle_members(&circle_id).len(), 2);
+
+    // 4. Verify get_cycle_contributions before and after contributions
+    assert_eq!(client.get_cycle_contributions(&circle_id, &0).len(), 0);
+
+    client.contribute(&circle_id, &user1, &100);
+    let cycle0_contribs = client.get_cycle_contributions(&circle_id, &0);
+    assert_eq!(cycle0_contribs.len(), 1);
+    assert_eq!(cycle0_contribs.get(0).unwrap(), user1);
+
+    client.contribute(&circle_id, &user2, &100);
+    let cycle0_contribs_full = client.get_cycle_contributions(&circle_id, &0);
+    assert_eq!(cycle0_contribs_full.len(), 2);
+
+    // Non-member still returns None
+    assert_eq!(client.get_member(&circle_id, &non_member), None);
+}
+
