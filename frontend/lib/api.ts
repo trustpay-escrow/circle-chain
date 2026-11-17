@@ -120,6 +120,16 @@ export interface CircleData {
   contributions?: ContributionData[];
 }
 
+export interface ReputationLogData {
+  id: string;
+  wallet_address: string;
+  circle_id: number | string;
+  event_type: string;
+  score_change: number;
+  reason: string;
+  created_at: string;
+}
+
 export interface UserProfileData {
   wallet_address: string;
   username?: string;
@@ -131,6 +141,17 @@ export interface UserProfileData {
   circles_completed?: number;
   punctual_contributions?: number;
   total_collateral_staked?: number;
+  reputation_logs?: ReputationLogData[];
+}
+
+export interface NotificationData {
+  id: string;
+  wallet_address: string;
+  circle_id: number | string;
+  message: string;
+  notification_type: string;
+  is_read: boolean;
+  created_at: string;
 }
 
 export interface NotificationData {
@@ -292,6 +313,32 @@ export async function cancelCircleApi(
   } catch (err: any) {
     console.error(`[CircleChain API] Failed to cancel circle #${circleId}:`, err);
     return { success: false, error: err.message || 'Network error cancelling circle' };
+  }
+}
+
+// 4d. Emergency unwind a defaulted or stalled circle (transitions to Terminated)
+export async function unwindCircleApi(
+  circleId: number,
+  callerAddress: string
+): Promise<{ success: boolean; circle?: CircleData; error?: string }> {
+  try {
+    const token = getAuthToken(callerAddress);
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const res = await fetch(`${BACKEND_URL}/api/circles/${circleId}/unwind`, {
+      method: 'POST',
+      headers
+    });
+
+    const data = await res.json();
+    if (res.ok && data.success) {
+      return { success: true, circle: data.circle };
+    }
+    return { success: false, error: data.error || 'Failed to emergency unwind circle' };
+  } catch (err: any) {
+    console.error(`[CircleChain API] Failed to emergency unwind circle #${circleId}:`, err);
+    return { success: false, error: err.message || 'Network error unwinding circle' };
   }
 }
 

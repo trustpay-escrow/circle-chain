@@ -73,6 +73,15 @@ export class CirclesService {
     return circlesRepository.cancelCircle(circleId);
   }
 
+  async unwindCircle(circleId: number) {
+    const circle = await circlesRepository.findById(circleId);
+    if (!circle) {
+      throw new Error(`Circle #${circleId} not found`);
+    }
+
+    return circlesRepository.unwindCircle(circleId);
+  }
+
   async slashDefaulter(
     circleId: number,
     defaulterAddress: string,
