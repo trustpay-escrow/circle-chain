@@ -154,6 +154,16 @@ export interface NotificationData {
   created_at: string;
 }
 
+export interface NotificationData {
+  id: string;
+  wallet_address: string;
+  circle_id: number | string;
+  message: string;
+  notification_type: string;
+  is_read: boolean;
+  created_at: string;
+}
+
 // 1. Fetch all savings circles from Prisma backend
 export async function fetchCircles(): Promise<CircleData[]> {
   try {
